@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KidsBuddy — Applications Dashboard</title>
+  <link rel="icon" type="image/x-icon" href="../favicon_io/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="../favicon_io/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../favicon_io/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="../favicon_io/apple-touch-icon.png">
   <style>
     :root {
       --bg:       #f5f6fa;
@@ -319,13 +323,37 @@
 
     /* Toggle wrapper (label + button) */
     .toggle-wrap  { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-    .toggle-label { display: none; } /* hidden on desktop — column header covers it */
+    .toggle-label { display: none; }
+
+    /* Pill toggle (Contacted) — desktop shows only the active segment */
+    .pill-toggle {
+      display: inline-flex; border-radius: 20px; overflow: hidden;
+      border: none; cursor: pointer; padding: 0; background: none;
+    }
+    .pill-toggle .pt-yes,
+    .pill-toggle .pt-no  { display: none; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+    .pill-toggle.yes .pt-yes { display: inline-flex; align-items: center; background: #dcfce7; color: #16a34a; border-radius: 20px; }
+    .pill-toggle.no  .pt-no  { display: inline-flex; align-items: center; background: #fef2f2; color: #dc2626; border-radius: 20px; }
+
+    /* Contact icons (WA + mail) in phone cell */
+    .td-phone    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .contact-icons { display: inline-flex; gap: 5px; }
+    .icon-wa   { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #dcfce7; color: #16a34a; text-decoration: none; }
+    .icon-mail { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #eff6ff; color: #4f46e5; text-decoration: none; }
+    .icon-wa:hover   { background: #bbf7d0; }
+    .icon-mail:hover { background: #dbeafe; }
+
+    /* Mobile-extra details hidden on desktop */
+    .mobile-extra { display: none; }
+
+    /* Mail Sent column — normal on desktop */
+    .td-mail-sent { }
 
     /* Expand button (hidden on desktop, shown as card footer on mobile) */
     .td-expand   { display: none; }
     .btn-expand  {
       width: 100%; padding: 9px 0; border: none; background: none;
-      color: var(--primary); font-size: 13px; font-weight: 500;
+      color: #374151; font-size: 13px; font-weight: 500;
       cursor: pointer; text-align: center; border-top: 1px solid var(--border);
       margin-top: 10px;
     }
@@ -437,24 +465,46 @@
         padding-top: 3px;
       }
 
+      /* Mail Sent — hidden on mobile (stays in sheet) */
+      tr.data-row td.td-mail-sent { display: none; }
+
       /* Expand button — full width, row 5 */
       tr.data-row td.td-expand {
         display: block;
         grid-column: 1 / -1; grid-row: 5;
       }
 
-      /* Toggle labels visible on mobile */
+      /* Toggle label (Contacted) visible on mobile */
       .toggle-label {
         display: block;
         font-size: 10px; color: var(--muted);
         text-align: right; margin-bottom: 2px;
       }
 
-      /* Larger touch targets for toggles */
-      .btn-toggle { padding: 5px 14px; font-size: 12px; min-width: 52px; }
+      /* Pill toggle — show both segments on mobile */
+      .pill-toggle {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 20px;
+        overflow: hidden;
+        min-width: 78px;
+      }
+      .pill-toggle .pt-yes,
+      .pill-toggle .pt-no  { display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 5px 10px; font-size: 11px; font-weight: 700; }
+      /* YES active */
+      .pill-toggle.yes { border-color: #16a34a; }
+      .pill-toggle.yes .pt-yes { background: #dcfce7; color: #16a34a; border-radius: 20px 0 0 20px; }
+      .pill-toggle.yes .pt-no  { background: #fff;    color: #9ca3af; }
+      /* NO active */
+      .pill-toggle.no  { border-color: #dc2626; }
+      .pill-toggle.no  .pt-no  { background: #fef2f2; color: #dc2626; border-radius: 0 20px 20px 0; }
+      .pill-toggle.no  .pt-yes { background: #fff;    color: #9ca3af; }
+
+      /* Mobile-extra: subjects + location below classes */
+      .mobile-extra { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+      .me-row { font-size: 11px; color: var(--muted); }
 
       /* Expand button full-width tap area */
-      .btn-expand { margin-top: 8px; padding: 10px 0; font-size: 14px; }
+      .btn-expand { margin-top: 8px; padding: 10px 0; font-size: 13px; color: #374151; }
 
       /* Detail row — block below the card, visually connected */
       tr.detail-row        { display: none; }
@@ -580,7 +630,7 @@
             <th>Classes</th>
             <th>Submitted</th>
             <th>Contacted</th>
-            <th>Mail Sent</th>
+            <th>Mail</th>
             <th></th>
           </tr>
         </thead>
