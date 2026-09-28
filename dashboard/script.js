@@ -414,10 +414,18 @@ function cell(row, idx) { return String(row[idx] || '').trim(); }
 // Parse "DD/MM/YYYY HH:MM:SS" (Google Sheets locale) → Date object
 function parseDate(str) {
   if (!str) return new Date(0);
-  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  // "DD/MM/YYYY HH:MM:SS" — Google Sheets locale
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
   const d = new Date(str);
   return isNaN(d) ? new Date(0) : d;
+}
+
+function formatTime(d) {
+  let h = d.getHours(), m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
 function formatDate(str) {
@@ -429,11 +437,12 @@ function formatDate(str) {
   const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const day   = new Date(d.getFullYear(),   d.getMonth(),   d.getDate());
-  const diff  = today - day; // ms difference (whole days)
+  const diff  = today - day;
+  const time  = formatTime(d);
 
-  if (diff === 0)           return 'Today';
-  if (diff === 86400000)    return 'Yesterday';
-  return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`;
+  if (diff === 0)        return `Today, ${time}`;
+  if (diff === 86400000) return `Yesterday, ${time}`;
+  return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}, ${time}`;
 }
 
 function esc(s) {
