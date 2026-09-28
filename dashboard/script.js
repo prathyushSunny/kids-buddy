@@ -62,7 +62,8 @@ window.onload = () => {
       callback: handleToken
     });
 
-    tokenClient.requestAccessToken({ prompt: knownEmail ? '' : 'select_account' });
+    // prompt:'none' = truly silent (no UI). Falls back to sign-in button on failure.
+    tokenClient.requestAccessToken({ prompt: knownEmail ? 'none' : 'select_account' });
   }, 100);
 };
 
@@ -75,7 +76,10 @@ async function handleToken(resp) {
     clearSession();
     document.getElementById('dashboard').style.display = 'none';
     document.getElementById('signin-screen').style.display = 'flex';
-    if (resp.error !== 'user_cancel') showError('Sign-in failed: ' + resp.error);
+    // Silent refresh failures (immediate_failed, user_cancel) are expected — just show the button.
+    // Only surface an error for unexpected failures.
+    const silentFailures = ['immediate_failed', 'user_cancel', 'access_denied'];
+    if (!silentFailures.includes(resp.error)) showError('Sign-in failed: ' + resp.error);
     return;
   }
 
