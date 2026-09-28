@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KidsBuddy — Applications Dashboard</title>
+  <style>
+    :root {
+      --bg:       #f5f6fa;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
+      --text:     #1a202c;
+      --muted:    #64748b;
+      --primary:  #4f8ef7;
+      --primary2: #3b6fd4;
+      --green:    #22c55e;
+      --radius:   8px;
+      --shadow:   0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Sign-in ── */
+    #signin-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .signin-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+      text-align: center;
+      max-width: 360px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    .signin-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .signin-card p  { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+
+    /* ── Dashboard ── */
+    #dashboard { display: none; }
+
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-title { font-size: 15px; font-weight: 700; }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .btn-signout {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .btn-signout:hover { background: var(--bg); }
+
+    .main { max-width: 1440px; margin: 0 auto; padding: 24px; }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+
+    .stat-value { font-size: 30px; font-weight: 700; margin-top: 2px; }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 220px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--surface);
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--primary); }
+
+    select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--surface);
+      cursor: pointer;
+      outline: none;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .btn:hover { background: var(--primary2); }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      background: var(--bg);
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody tr.data-row {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    tbody tr.data-row:hover    { background: #f8fafc; }
+    tbody tr.data-row.expanded { background: #eff6ff; }
+
+    td { padding: 10px 14px; vertical-align: middle; }
+
+    .td-name  { font-weight: 600; }
+    .td-id    { font-size: 12px; color: var(--muted); }
+    .td-date  { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .td-phone { font-family: monospace; font-size: 13px; }
+
+    .wa-link {
+      color: #25d366;
+      text-decoration: none;
+      font-size: 11px;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+
+    /* ── Toggle buttons ── */
+    .btn-toggle {
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      min-width: 40px;
+    }
+    .btn-toggle.yes { background: #dcfce7; color: #15803d; }
+    .btn-toggle.no  { background: #fee2e2; color: #b91c1c; }
+    .btn-toggle:hover   { opacity: 0.75; }
+    .btn-toggle:disabled { opacity: 0.45; cursor: wait; }
+
+    /* ── Detail row ── */
+    tr.detail-row { display: none; }
+    tr.detail-row.open { display: table-row; }
+
+    tr.detail-row td {
+      background: #f8fafc;
+      padding: 16px 20px;
+      cursor: default;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .detail-field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .detail-field span { font-size: 13px; }
+
+    .notes-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .notes-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      white-space: nowrap;
+      padding-top: 8px;
+    }
+
+    .notes-wrap { flex: 1; }
+
+    .notes-input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 38px;
+      background: white;
+    }
+    .notes-input:focus { outline: none; border-color: var(--primary); }
+
+    .save-status { font-size: 11px; color: var(--muted); margin-top: 3px; height: 16px; }
+
+    /* ── Misc ── */
+    .state-msg { text-align: center; padding: 60px 20px; color: var(--muted); }
+
+    .error-banner {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      color: #b91c1c;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .result-count { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+    .google-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.1s, box-shadow 0.1s;
+      margin: 0 auto;
+    }
+    .google-btn:hover { background: #f8fafc; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+  </style>
+</head>
+<body>
+
+<!-- ── SIGN-IN ──────────────────────────────────────────────────────────── -->
+<div id="signin-screen">
+  <div class="signin-card">
+    <h1>📚 KidsBuddy</h1>
+    <p>Applications Dashboard · authorized team only</p>
+    <button class="google-btn" onclick="startSignIn()">
+      <svg width="18" height="18" viewBox="0 0 48 48" style="display:block">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ────────────────────────────────────────────────────────── -->
+<div id="dashboard">
+  <div class="topbar">
+    <span class="topbar-title">📚 KidsBuddy — Applications</span>
+    <div class="topbar-right">
+      <span id="user-email"></span>
+      <button class="btn-signout" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="error-banner" id="error-banner"></div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Total</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Contacted</div>
+        <div class="stat-value" id="stat-contacted" style="color:#22c55e">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Not Contacted</div>
+        <div class="stat-value" id="stat-pending" style="color:#ef4444">—</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input class="search-input" id="search"
+        placeholder="Search name, phone, email, college…"
+        oninput="applyFilters()">
+      <select id="filter-contacted" onchange="applyFilters()">
+        <option value="">All — Contacted</option>
+        <option value="No">Not contacted</option>
+        <option value="Yes">Contacted</option>
+      </select>
+      <select id="filter-classes" onchange="applyFilters()">
+        <option value="">All — Classes</option>
+      </select>
+      <button class="btn" onclick="loadApplications()">↻ Refresh</button>
+    </div>
+
+    <div class="result-count" id="result-count"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Classes</th>
+            <th>Submitted</th>
+            <th>Contacted</th>
+            <th>Mail Sent</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="7" class="state-msg">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="script.js" defer></script>
+</body>
+</html>

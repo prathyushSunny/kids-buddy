@@ -1,0 +1,351 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #e0e0e0;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 12px;
+    max-width: 480px;
+    margin-inline: auto;
+}
+
+.container {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 8px;
+}
+
+/* Header Styles */
+.header {
+    text-align: center;
+    padding: 12px 0 8px;
+}
+
+.hero-image {
+    width: 80%;
+    height: auto;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    object-fit: cover;
+}
+
+.brand-name {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #4a9eff;
+    text-shadow: 0 2px 10px rgba(74, 158, 255, 0.3);
+}
+
+.main-title {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: #b0c4de;
+    margin-bottom: 6px;
+    text-shadow: 0 2px 15px rgba(74, 158, 255, 0.4);
+    letter-spacing: 0.5px;
+}
+
+.phone-number {
+    font-size: 0.9rem;
+    color: #4a9eff;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+    text-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);
+    letter-spacing: 1px;
+}
+
+.slogan {
+    font-size: 0.85rem;
+    color: #b0c4de;
+    font-weight: 400;
+    margin: 0;
+}
+
+.contact-boxes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.contact-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+    background: rgba(74, 158, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(74, 158, 255, 0.15);
+}
+
+.whatsapp-box {
+    background: rgba(37, 211, 102, 0.15);
+    border-color: rgba(37, 211, 102, 0.3);
+}
+
+.whatsapp-box:hover {
+    background: rgba(37, 211, 102, 0.25);
+    border-color: rgba(37, 211, 102, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);
+}
+
+.phone-box {
+    background: rgba(74, 158, 255, 0.15);
+    border-color: rgba(74, 158, 255, 0.3);
+}
+
+.phone-box:hover {
+    background: rgba(74, 158, 255, 0.25);
+    border-color: rgba(74, 158, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(74, 158, 255, 0.3);
+}
+
+.contact-icon-img {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.contact-label {
+    color: #e0e0e0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Call to Action Section */
+.cta-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.cta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: #ffb366;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 179, 102, 0.4);
+    padding-bottom: 0;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.cta-item:hover {
+    color: #ffcc99;
+    border-bottom-color: rgba(255, 179, 102, 0.7);
+    text-decoration: none;
+}
+
+.cta-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.cta-text {
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Services Grid */
+.services {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 15px;
+    padding-bottom: 140px;
+}
+
+.service-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 12px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.service-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(74, 158, 255, 0.25);
+    border-color: rgba(74, 158, 255, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.service-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(74, 158, 255, 0.3);
+}
+
+.service-icon {
+    font-size: 1.3rem;
+    filter: drop-shadow(0 2px 5px rgba(74, 158, 255, 0.3));
+}
+
+.service-title {
+    font-size: 1rem;
+    color: #4a9eff;
+    font-weight: 700;
+    margin: 0;
+}
+
+.service-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.service-list li {
+    padding: 5px 0;
+    padding-left: 18px;
+    position: relative;
+    color: #e0e0e0;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.service-list li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: #4a9eff;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.service-list li strong {
+    color: #6bb6ff;
+    font-weight: 600;
+}
+
+.contact-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffd54f;
+    margin-bottom: 10px;
+    text-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+    letter-spacing: 1px;
+    text-align: center;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Hiring Section */
+.hiring-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 12px;
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 152, 0, 0.2) 100%);
+    border: 2px solid rgba(255, 193, 7, 0.5);
+    border-radius: 15px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin-top: 15px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 20px rgba(255, 193, 7, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.hiring-section::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s ease;
+}
+
+.hiring-section:hover::before {
+    left: 100%;
+}
+
+.hiring-section:hover {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.3) 0%, rgba(255, 152, 0, 0.3) 100%);
+    border-color: rgba(255, 193, 7, 0.7);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(255, 193, 7, 0.4);
+    text-decoration: none;
+}
+
+.hiring-icon {
+    font-size: 1.8rem;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.5));
+}
+
+.hiring-text {
+    color: #ffd54f;
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+    text-align: left;
+    text-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+    letter-spacing: 0.5px;
+}
+
+/* Contact Section */
+.contact {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 12px;
+    background: #16203d;
+    width: 100%;
+    box-shadow: 0 -6px 15px rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(74, 158, 255, 0.3);
+}
+
+@media (min-width: 481px) {
+    .contact {
+        position: sticky;
+    }
+}
+
+@media (max-width: 480px) {
+    .contact {
+        padding-bottom: 50px;
+        transform: translateY(38px);
+    }
+}
