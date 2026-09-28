@@ -426,6 +426,14 @@ function formatDate(str) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const d = parseDate(str);
   if (!d.getTime()) return str;
+
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day   = new Date(d.getFullYear(),   d.getMonth(),   d.getDate());
+  const diff  = today - day; // ms difference (whole days)
+
+  if (diff === 0)           return 'Today';
+  if (diff === 86400000)    return 'Yesterday';
   return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`;
 }
 
