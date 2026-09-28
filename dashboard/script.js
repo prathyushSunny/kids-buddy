@@ -265,7 +265,7 @@ function renderTable(filtered) {
       </td>
       <td class="td-expand">
         <button class="btn-expand" data-uid="${uid}" onclick="event.stopPropagation(); handleExpand(this)">
-          Full information <span class="expand-arrow">↓</span>
+          Full information <span class="expand-chevron"></span>
         </button>
       </td>`;
     tr.onclick = () => toggleDetail(uid, tr);
@@ -317,9 +317,8 @@ function toggleDetail(uid, tr) {
   const dr   = document.getElementById(`detail-${uid}`);
   const open = dr.classList.toggle('open');
   tr.classList.toggle('expanded', open);
-  // keep expand-arrow in sync if button is present
-  const btn = tr.querySelector('.btn-expand');
-  if (btn) btn.querySelector('.expand-arrow').textContent = open ? '↑' : '↓';
+  const chevron = tr.querySelector('.expand-chevron');
+  if (chevron) chevron.classList.toggle('up', open);
 }
 
 function handleExpand(btn) {

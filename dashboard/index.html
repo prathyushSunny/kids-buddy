@@ -352,12 +352,18 @@
     /* Expand button (hidden on desktop, shown as card footer on mobile) */
     .td-expand   { display: none; }
     .btn-expand  {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
       width: 100%; padding: 9px 0; border: none; background: none;
       color: #374151; font-size: 13px; font-weight: 500;
-      cursor: pointer; text-align: center; border-top: 1px solid var(--border);
-      margin-top: 10px;
+      cursor: pointer; border-top: 1px solid var(--border); margin-top: 10px;
     }
-    .expand-arrow { display: inline-block; transition: transform 0.2s; }
+    /* CSS chevron — looks like a V */
+    .expand-chevron {
+      display: inline-block; width: 8px; height: 8px;
+      border-right: 2px solid #374151; border-bottom: 2px solid #374151;
+      transform: rotate(45deg); margin-top: -4px; transition: transform 0.2s;
+    }
+    .expand-chevron.up { transform: rotate(-135deg); margin-top: 3px; }
 
     /* ── Mobile ────────────────────────────────────────────────────────────── */
     @media (max-width: 639px) {
@@ -446,10 +452,11 @@
         font-size: 12px; color: var(--muted); padding-top: 3px;
       }
 
-      /* Submitted date — row 4, left column */
+      /* Submitted date — bottom-right of card */
       tr.data-row td:nth-child(5) {
-        grid-column: 1; grid-row: 4;
-        font-size: 11px; color: var(--muted); padding-top: 4px;
+        grid-column: 2; grid-row: 4;
+        font-size: 11px; color: var(--muted);
+        text-align: right; align-self: end;
       }
 
       /* Contacted toggle — col 2 row 1 */
@@ -504,7 +511,7 @@
       .me-row { font-size: 11px; color: var(--muted); }
 
       /* Expand button full-width tap area */
-      .btn-expand { margin-top: 8px; padding: 10px 0; font-size: 13px; color: #374151; }
+      .btn-expand { margin-top: 8px; padding: 10px 0; font-size: 13px; }
 
       /* Detail row — block below the card, visually connected */
       tr.detail-row        { display: none; }
