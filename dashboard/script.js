@@ -128,6 +128,8 @@ async function loadApplications() {
     const result = await apiFetch(url);
 
     allRows = (result.values || []).filter(r => r.length > 0);
+    // Sort latest submission first
+    allRows.sort((a, b) => new Date(cell(b, C.SUBMITTED)) - new Date(cell(a, C.SUBMITTED)));
     populateClassFilter();
     applyFilters();
   } catch (err) {
@@ -212,6 +214,8 @@ function renderTable(filtered) {
       ? `https://wa.me/${waNum}?text=${encodeURIComponent('Hello ' + name + ', I\'m contacting you regarding your submission for KidsBuddy home tuitions.')}`
       : null;
 
+    const submittedFmt = formatDate(cell(row, C.SUBMITTED));
+
     const tr = document.createElement('tr');
     tr.className = 'data-row';
     tr.dataset.uid = uid;
@@ -223,23 +227,34 @@ function renderTable(filtered) {
         ${waHref ? `<a class="wa-link" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()">WhatsApp ↗</a>` : ''}
       </td>
       <td>${esc(cell(row, C.CLASSES))}</td>
-      <td class="td-date">${esc(cell(row, C.SUBMITTED))}</td>
+      <td class="td-date">${esc(submittedFmt)}</td>
       <td>
-        <button class="btn-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
-          data-sheet-row="${sheetRow}"
-          data-col="${C.CONTACTED + 1}"
-          data-current="${esc(contacted)}"
-          onclick="event.stopPropagation(); handleToggle(this)">
-          ${contacted}
-        </button>
+        <div class="toggle-wrap">
+          <span class="toggle-label">Contacted</span>
+          <button class="btn-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
+            data-sheet-row="${sheetRow}"
+            data-col="${C.CONTACTED + 1}"
+            data-current="${esc(contacted)}"
+            onclick="event.stopPropagation(); handleToggle(this)">
+            ${contacted}
+          </button>
+        </div>
       </td>
       <td>
-        <button class="btn-toggle ${mailSent === 'Yes' ? 'yes' : 'no'}"
-          data-sheet-row="${sheetRow}"
-          data-col="${C.MAIL_SENT + 1}"
-          data-current="${esc(mailSent)}"
-          onclick="event.stopPropagation(); handleToggle(this)">
-          ${mailSent}
+        <div class="toggle-wrap">
+          <span class="toggle-label">Mail Sent</span>
+          <button class="btn-toggle ${mailSent === 'Yes' ? 'yes' : 'no'}"
+            data-sheet-row="${sheetRow}"
+            data-col="${C.MAIL_SENT + 1}"
+            data-current="${esc(mailSent)}"
+            onclick="event.stopPropagation(); handleToggle(this)">
+            ${mailSent}
+          </button>
+        </div>
+      </td>
+      <td class="td-expand">
+        <button class="btn-expand" data-uid="${uid}" onclick="event.stopPropagation(); handleExpand(this)">
+          Full information <span class="expand-arrow">↓</span>
         </button>
       </td>`;
     tr.onclick = () => toggleDetail(uid, tr);
@@ -249,8 +264,9 @@ function renderTable(filtered) {
     dr.className = 'detail-row';
     dr.id = `detail-${uid}`;
     dr.innerHTML = `
-      <td colspan="7">
+      <td colspan="8">
         <div class="detail-grid">
+          ${df('Submitted',              formatDate(cell(row, C.SUBMITTED)))}
           ${df('Email',                  cell(row, C.EMAIL))}
           ${df('Student / Working',      cell(row, C.STUDENT))}
           ${df('College / Company',      cell(row, C.COLLEGE))}
@@ -290,6 +306,15 @@ function toggleDetail(uid, tr) {
   const dr   = document.getElementById(`detail-${uid}`);
   const open = dr.classList.toggle('open');
   tr.classList.toggle('expanded', open);
+  // keep expand-arrow in sync if button is present
+  const btn = tr.querySelector('.btn-expand');
+  if (btn) btn.querySelector('.expand-arrow').textContent = open ? '↑' : '↓';
+}
+
+function handleExpand(btn) {
+  const uid = btn.dataset.uid;
+  const tr  = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+  toggleDetail(uid, tr);
 }
 
 // ── INLINE EDITS ──────────────────────────────────────────────────────────────
@@ -372,13 +397,21 @@ function numToCol(n) {
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 function cell(row, idx) { return String(row[idx] || '').trim(); }
 
+function formatDate(str) {
+  if (!str) return '';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d = new Date(str);
+  if (isNaN(d)) return str;
+  return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}`;
+}
+
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function setTableMsg(msg) {
   document.getElementById('table-body').innerHTML =
-    `<tr><td colspan="7" class="state-msg">${msg}</td></tr>`;
+    `<tr><td colspan="8" class="state-msg">${msg}</td></tr>`;
 }
 
 function showError(msg) {
