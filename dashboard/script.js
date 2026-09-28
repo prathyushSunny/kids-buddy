@@ -128,7 +128,8 @@ async function loadApplications() {
     const result = await apiFetch(url);
 
     allRows = (result.values || []).filter(r => r.length > 0);
-    // Sort latest submission first
+    // Stamp real sheet row number BEFORE sorting (row 1 = header, data starts at 2)
+    allRows.forEach((row, i) => { row._sheetRow = i + 2; });
     allRows.sort((a, b) => parseDate(cell(b, C.SUBMITTED)) - parseDate(cell(a, C.SUBMITTED)));
     populateClassFilter();
     applyFilters();
@@ -199,9 +200,8 @@ function renderTable(filtered) {
   tbody.innerHTML = '';
 
   filtered.forEach((row, fi) => {
-    const globalIdx = allRows.indexOf(row);
-    const sheetRow  = globalIdx + 2;
-    const uid       = `r${fi}`;
+    const sheetRow = row._sheetRow;
+    const uid      = `r${fi}`;
 
     const name      = cell(row, C.NAME)      || '—';
     const phone     = cell(row, C.PHONE)     || '—';
@@ -347,9 +347,11 @@ async function handleToggle(btn) {
     }
     btn.dataset.current = next;
 
-    const ri = sheetRow - 2;
-    if (colNum === C.CONTACTED + 1) allRows[ri][C.CONTACTED] = next;
-    if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT]  = next;
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) {
+      if (colNum === C.CONTACTED + 1) allRows[ri][C.CONTACTED] = next;
+      if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT] = next;
+    }
     updateStats();
   } catch (err) {
     showError('Update failed: ' + err.message);
@@ -369,7 +371,8 @@ async function handleSaveNotes(textarea) {
 
   try {
     await updateCell(sheetRow, C.NOTES + 1, value);
-    allRows[sheetRow - 2][C.NOTES] = value;
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) allRows[ri][C.NOTES] = value;
     textarea.dataset.original      = value;
     status.textContent = 'Saved ✓';
     setTimeout(() => { status.textContent = ''; }, 2000);
