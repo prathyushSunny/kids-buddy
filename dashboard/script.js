@@ -47,10 +47,11 @@ function clearSession() {
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 window.onload = () => {
-  const stored = loadSession();
+  // window.__kbSession was set synchronously by the inline script in index.html
+  // before first paint, so the correct screen is already visible by now.
+  const stored = window.__kbSession || loadSession();
 
   if (stored) {
-    // Valid token already in storage — go straight to dashboard, no Google call
     accessToken = stored.token;
     document.getElementById('user-email').textContent = stored.email;
     document.getElementById('signin-screen').style.display = 'none';

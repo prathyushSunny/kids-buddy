@@ -51,7 +51,10 @@
     .signin-card p  { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
 
     /* ── Dashboard ── */
-    #dashboard { display: none; }
+    /* Both screens hidden by default — the inline script below shows the right one
+       before first paint, preventing any flash. */
+    #signin-screen { display: none; }
+    #dashboard     { display: none; }
 
     .topbar {
       background: var(--surface);
@@ -316,6 +319,26 @@
   </style>
 </head>
 <body>
+<script>
+  // Runs synchronously before first paint — no flash.
+  (function () {
+    var token  = localStorage.getItem('kb_token');
+    var expiry = parseInt(localStorage.getItem('kb_expiry') || '0');
+    var email  = localStorage.getItem('kb_email');
+    var valid  = token && email && expiry > Date.now() + 120000;
+    document.getElementById
+      ? null // DOM not ready yet — handled below
+      : null;
+    // Store result for window.onload to pick up without re-checking
+    window.__kbSession = valid ? { token: token, email: email } : null;
+    // Inject a <style> so the right screen is visible immediately
+    var s = document.createElement('style');
+    s.textContent = valid
+      ? '#dashboard { display: block !important; }'
+      : '#signin-screen { display: flex !important; }';
+    document.head.appendChild(s);
+  })();
+</script>
 
 <!-- ── SIGN-IN ──────────────────────────────────────────────────────────── -->
 <div id="signin-screen">
