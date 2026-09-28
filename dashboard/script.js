@@ -22,33 +22,43 @@ let accessToken = null;
 let allRows     = [];
 
 // ── SESSION STORAGE ───────────────────────────────────────────────────────────
-// Only the email is stored long-term. The access token is always refreshed
-// silently on load — no sign-in prompt needed after the first time.
-const SK = { email: 'kb_email' };
+// Token + expiry stored for up to 1h (Google's hard limit).
+// On load we use the stored token directly — no Google request needed.
+const SK = { token: 'kb_token', expiry: 'kb_expiry', email: 'kb_email' };
 
-function saveSession(email) {
-  localStorage.setItem(SK.email, email);
+function saveSession(token, expiresIn, email) {
+  localStorage.setItem(SK.token,  token);
+  localStorage.setItem(SK.expiry, Date.now() + (expiresIn * 1000));
+  localStorage.setItem(SK.email,  email);
 }
 
-function storedEmail() {
-  return localStorage.getItem(SK.email);
+function loadSession() {
+  const token  = localStorage.getItem(SK.token);
+  const expiry = parseInt(localStorage.getItem(SK.expiry) || '0');
+  const email  = localStorage.getItem(SK.email);
+  // Require at least 2 minutes remaining so mid-session calls don't fail
+  if (token && email && expiry > Date.now() + 120000) return { token, email };
+  return null;
 }
 
 function clearSession() {
-  localStorage.removeItem(SK.email);
+  Object.values(SK).forEach(k => localStorage.removeItem(k));
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 window.onload = () => {
-  const knownEmail = storedEmail();
+  const stored = loadSession();
 
-  if (knownEmail) {
+  if (stored) {
+    // Valid token already in storage — go straight to dashboard, no Google call
+    accessToken = stored.token;
+    document.getElementById('user-email').textContent = stored.email;
     document.getElementById('signin-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
-    document.getElementById('user-email').textContent = knownEmail;
-    setTableMsg('Loading…');
+    loadApplications();
   }
 
+  // Init token client regardless (needed for sign-in button and sign-out)
   const ready = setInterval(() => {
     if (!window.google) return;
     clearInterval(ready);
@@ -61,9 +71,6 @@ window.onload = () => {
       ].join(' '),
       callback: handleToken
     });
-
-    // prompt:'none' = truly silent (no UI). Falls back to sign-in button on failure.
-    tokenClient.requestAccessToken({ prompt: knownEmail ? 'none' : 'select_account' });
   }, 100);
 };
 
@@ -73,13 +80,7 @@ function startSignIn() {
 
 async function handleToken(resp) {
   if (resp.error) {
-    clearSession();
-    document.getElementById('dashboard').style.display = 'none';
-    document.getElementById('signin-screen').style.display = 'flex';
-    // Silent refresh failures (immediate_failed, user_cancel) are expected — just show the button.
-    // Only surface an error for unexpected failures.
-    const silentFailures = ['immediate_failed', 'user_cancel', 'access_denied'];
-    if (!silentFailures.includes(resp.error)) showError('Sign-in failed: ' + resp.error);
+    showError('Sign-in failed: ' + resp.error);
     return;
   }
 
@@ -91,22 +92,16 @@ async function handleToken(resp) {
 
     if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
       accessToken = null;
-      clearSession();
-      document.getElementById('dashboard').style.display = 'none';
-      document.getElementById('signin-screen').style.display = 'flex';
       showError('Access denied — this dashboard is for authorized team members only.');
       return;
     }
 
-    saveSession(email);
+    saveSession(resp.access_token, resp.expires_in || 3600, email);
     document.getElementById('user-email').textContent = email;
     document.getElementById('signin-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     loadApplications();
   } catch (err) {
-    clearSession();
-    document.getElementById('dashboard').style.display = 'none';
-    document.getElementById('signin-screen').style.display = 'flex';
     showError('Could not verify your account: ' + err.message);
   }
 }
