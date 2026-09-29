@@ -259,12 +259,14 @@ function appendRows() {
     const sheetRow = row._sheetRow;
     const uid      = `r${fi}`;
 
-    const name      = cell(row, C.NAME)      || '—';
-    const phone     = cell(row, C.PHONE)     || '—';
-    const email     = cell(row, C.EMAIL);
-    const contacted = cell(row, C.CONTACTED) || 'No';
-    const mailSent  = cell(row, C.MAIL_SENT) || 'No';
-    const notes     = cell(row, C.NOTES);
+    const name        = cell(row, C.NAME)             || '—';
+    const phone       = cell(row, C.PHONE)            || '—';
+    const email       = cell(row, C.EMAIL);
+    const contacted   = cell(row, C.CONTACTED)        || 'No';
+    const mailSent    = cell(row, C.MAIL_SENT)        || 'No';
+    const notes       = cell(row, C.NOTES);
+    const ivStatus    = cell(row, C.INTERVIEW_STATUS);
+    const ivAt        = cell(row, C.INTERVIEW_AT);
 
     const digits = phone.replace(/\D/g, '');
     const waNum  = digits.length === 10 ? '91' + digits : digits;
@@ -299,6 +301,9 @@ function appendRows() {
         </div>
         <div class="card-notes" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
           ${notesInlineHTML(notes)}
+        </div>
+        <div class="card-interview" data-sheet-row="${sheetRow}" data-iv-status="${esc(ivStatus)}" data-iv-at="${esc(ivAt)}">
+          ${interviewStatusHTML(ivStatus, ivAt, sheetRow)}
         </div>
       </td>
       <td class="td-date">${esc(submittedFmt)}</td>
@@ -595,6 +600,100 @@ async function saveCardNotes(container) {
   } catch (err) {
     showError('Notes save failed: ' + err.message);
     cancelCardNotes(container);
+  }
+}
+
+// ── INTERVIEW STATUS ──────────────────────────────────────────────────────────
+function interviewStatusHTML(status, scheduledAt, sheetRow) {
+  if (status === 'Cleared') {
+    return `<span class="iv-chip iv-cleared">✓ Interview Cleared</span>`;
+  }
+  if (status === 'Rejected') {
+    return `<span class="iv-chip iv-rejected">✕ Interview Rejected</span>`;
+  }
+  if (status === 'Scheduled' && scheduledAt) {
+    const d       = parseDate(scheduledAt);
+    const isPast  = d < new Date();
+    const dateLbl = formatDate(scheduledAt);
+    if (isPast) {
+      return `
+        <div class="iv-past-alert">
+          <span class="iv-past-msg">Interview on ${esc(dateLbl)} — cleared?</span>
+          <div class="iv-past-actions">
+            <button class="btn-iv-result yes" onclick="event.stopPropagation();markInterview(${sheetRow},'Cleared')">Yes, Cleared</button>
+            <button class="btn-iv-result no"  onclick="event.stopPropagation();markInterview(${sheetRow},'Rejected')">No, Rejected</button>
+          </div>
+        </div>`;
+    }
+    return `
+      <span class="iv-chip iv-scheduled">📅 ${esc(dateLbl)}</span>
+      <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">Change</button>`;
+  }
+  return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
+}
+
+function openScheduleModal(sheetRow, current) {
+  const modal = document.getElementById('schedule-modal');
+  modal.dataset.sheetRow = sheetRow;
+  const inp = document.getElementById('schedule-date-input');
+  if (current) {
+    const d = parseDate(current);
+    inp.value = d.toISOString().slice(0, 16);
+  } else {
+    inp.value = '';
+  }
+  modal.style.display = 'flex';
+  inp.focus();
+}
+
+function closeScheduleModal() {
+  document.getElementById('schedule-modal').style.display = 'none';
+}
+
+async function saveInterviewSchedule() {
+  const modal    = document.getElementById('schedule-modal');
+  const sheetRow = parseInt(modal.dataset.sheetRow);
+  const val      = document.getElementById('schedule-date-input').value;
+  if (!val) return;
+
+  const btn = modal.querySelector('.btn-schedule-save');
+  btn.disabled = true;
+  try {
+    // Format as DD/MM/YYYY HH:MM:SS to match sheet locale
+    const d = new Date(val);
+    const fmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
+    await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, 'Scheduled');
+    await updateCell(sheetRow, C.INTERVIEW_AT     + 1, fmt);
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) {
+      allRows[ri][C.INTERVIEW_STATUS] = 'Scheduled';
+      allRows[ri][C.INTERVIEW_AT]     = fmt;
+    }
+    const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
+    if (container) {
+      container.dataset.ivStatus = 'Scheduled';
+      container.dataset.ivAt     = fmt;
+      container.innerHTML = interviewStatusHTML('Scheduled', fmt, sheetRow);
+    }
+    closeScheduleModal();
+  } catch (err) {
+    showError('Failed to save interview date: ' + err.message);
+  }
+  btn.disabled = false;
+}
+
+async function markInterview(sheetRow, result) {
+  try {
+    await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, result);
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) allRows[ri][C.INTERVIEW_STATUS] = result;
+    const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
+    if (container) {
+      container.dataset.ivStatus = result;
+      container.innerHTML = interviewStatusHTML(result, '', sheetRow);
+    }
+  } catch (err) {
+    showError('Failed to update interview status: ' + err.message);
   }
 }
 

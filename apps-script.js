@@ -225,6 +225,36 @@ function initTutorSchemaColumns() {
   Logger.log("initTutorSchemaColumns complete.");
 }
 
+/**
+ * One-time fix: removes duplicate header columns, keeping only the first
+ * occurrence of each header name. Run once after duplicate columns appeared.
+ */
+function fixDuplicateHeaders() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const tabs = ["Tutors (Applied)", "Tutors (In-Loop)", "Tutors (Onboarded)", "Tutors (Bin)"];
+
+  tabs.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) return;
+
+    const lastCol = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+    const seen = new Set();
+    // Iterate right-to-left so we delete later dupes first (avoids index shift)
+    for (let i = lastCol - 1; i >= 0; i--) {
+      const h = String(headers[i]).trim();
+      if (seen.has(h)) {
+        sheet.deleteColumn(i + 1);
+        Logger.log(`Deleted duplicate column "${h}" at col ${i + 1} in "${tabName}"`);
+      } else {
+        seen.add(h);
+      }
+    }
+  });
+
+  Logger.log("fixDuplicateHeaders complete.");
+}
 
 /**
  * One-time: migrates all parent records from the source spreadsheet into

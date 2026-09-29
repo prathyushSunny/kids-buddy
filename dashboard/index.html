@@ -668,6 +668,67 @@
       cursor: pointer;
     }
     .btn-notes-cancel:hover { background: #f1f5f9; }
+
+    /* ── Interview Status ── */
+    .card-interview { margin-top: 8px; }
+
+    .iv-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .iv-scheduled { background: #fef3c7; color: #92400e; }
+    .iv-cleared   { background: #dcfce7; color: #166534; }
+    .iv-rejected  { background: #fee2e2; color: #991b1b; }
+
+    .iv-past-alert {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+    .iv-past-msg { display: block; color: #9a3412; font-weight: 500; margin-bottom: 6px; }
+    .iv-past-actions { display: flex; gap: 8px; }
+    .btn-iv-result {
+      padding: 4px 12px; border-radius: 6px; font-size: 12px;
+      font-weight: 600; border: none; cursor: pointer;
+    }
+    .btn-iv-result.yes { background: #dcfce7; color: #166534; }
+    .btn-iv-result.no  { background: #fee2e2; color: #991b1b; }
+
+    /* ── Schedule Modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .modal-card {
+      background: #fff; border-radius: 16px;
+      padding: 24px; width: 100%; max-width: 360px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+    .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+    .modal-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .modal-input {
+      width: 100%; padding: 9px 12px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 15px; font-family: inherit;
+      outline: none; box-sizing: border-box; margin-bottom: 20px;
+    }
+    .modal-input:focus { border-color: var(--primary); }
+    .modal-actions { display: flex; gap: 10px; }
+    .btn-modal-cancel {
+      flex: 1; padding: 10px; border: 1.5px solid var(--border);
+      border-radius: 8px; background: none; font-size: 14px;
+      font-weight: 500; color: var(--muted); cursor: pointer;
+    }
+    .btn-schedule-save {
+      flex: 1; padding: 10px; border: none;
+      border-radius: 8px; background: var(--primary); color: #fff;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .btn-schedule-save:disabled { opacity: 0.55; cursor: default; }
   </style>
 </head>
 <body>
@@ -772,6 +833,19 @@
           <tr><td colspan="8" class="state-msg">Loading…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Interview Modal -->
+<div id="schedule-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeScheduleModal()">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <h3 class="modal-title">Schedule a Visit</h3>
+    <label class="modal-label" for="schedule-date-input">Date &amp; Time</label>
+    <input id="schedule-date-input" type="datetime-local" class="modal-input">
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeScheduleModal()">Cancel</button>
+      <button class="btn-schedule-save" onclick="saveInterviewSchedule()">Schedule</button>
     </div>
   </div>
 </div>
