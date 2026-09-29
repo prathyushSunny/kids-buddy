@@ -745,6 +745,46 @@
       font-size: 14px; font-weight: 600; cursor: pointer;
     }
     .btn-schedule-save:disabled { opacity: 0.55; cursor: default; }
+
+    /* ── Time Drum ── */
+    .time-drum {
+      display: flex; align-items: center;
+      background: #f0f2f8; border-radius: 12px;
+      height: 144px; position: relative; overflow: hidden;
+      border: 1px solid #e2e5ed;
+    }
+    .drum-highlight {
+      position: absolute; left: 0; right: 0;
+      top: 50%; transform: translateY(-50%);
+      height: 48px;
+      background: rgba(79,142,247,0.1);
+      border-top: 1.5px solid rgba(79,142,247,0.35);
+      border-bottom: 1.5px solid rgba(79,142,247,0.35);
+      pointer-events: none; z-index: 2;
+    }
+    .drum-fade-top, .drum-fade-bot {
+      position: absolute; left: 0; right: 0; z-index: 3; pointer-events: none; height: 52px;
+    }
+    .drum-fade-top { top: 0; background: linear-gradient(to bottom, #f0f2f8 25%, transparent); }
+    .drum-fade-bot { bottom: 0; background: linear-gradient(to top, #f0f2f8 25%, transparent); }
+    .drum-col {
+      flex: 1; height: 100%; overflow-y: scroll;
+      scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; position: relative; z-index: 1;
+    }
+    .drum-col::-webkit-scrollbar { display: none; }
+    .drum-col-ampm { flex: 0 0 56px; }
+    .drum-item {
+      height: 48px; display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 500; color: #1a1a2e;
+      scroll-snap-align: center; user-select: none;
+    }
+    .drum-item.drum-pad { visibility: hidden; }
+    .drum-sep {
+      font-size: 22px; font-weight: 700; color: #1a1a2e;
+      flex-shrink: 0; width: 14px; text-align: center;
+      position: relative; z-index: 1;
+    }
   </style>
 </head>
 <body>
@@ -857,8 +897,18 @@
 <div id="schedule-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeScheduleModal()">
   <div class="modal-card" onclick="event.stopPropagation()">
     <h3 class="modal-title">Schedule a Visit</h3>
-    <label class="modal-label" for="schedule-date-input">Date &amp; Time</label>
-    <input id="schedule-date-input" type="text" class="modal-input" placeholder="Pick a date & time" readonly>
+    <label class="modal-label" for="schedule-date-input">Date</label>
+    <input id="schedule-date-input" type="text" class="modal-input" placeholder="Pick a date" readonly>
+    <label class="modal-label" style="margin-top:14px">Time</label>
+    <div class="time-drum" id="time-drum">
+      <div class="drum-fade-top"></div>
+      <div class="drum-fade-bot"></div>
+      <div class="drum-highlight"></div>
+      <div class="drum-col" id="drum-hour"></div>
+      <div class="drum-sep">:</div>
+      <div class="drum-col" id="drum-minute"></div>
+      <div class="drum-col drum-col-ampm" id="drum-ampm"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="closeScheduleModal()">Cancel</button>
       <button class="btn-schedule-save" onclick="saveInterviewSchedule()">Schedule</button>

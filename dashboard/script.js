@@ -10,6 +10,8 @@ let scrollObserver = null;
 
 let currentSection = 'tutors';   // 'tutors' | 'parents'
 let currentTabKey  = 'applied';  // key into SECTION_TABS[currentSection]
+let sheetIdMap     = {};         // sheet name → numeric sheetId (lazy-loaded)
+let _searchDebounce = null;
 
 const SECTION_TABS = {
   tutors: [
@@ -189,6 +191,10 @@ async function loadApplications() {
 }
 
 function applyFilters() {
+  clearTimeout(_searchDebounce);
+  _searchDebounce = setTimeout(_doFilter, 300);
+}
+function _doFilter() {
   const q      = document.getElementById('search').value.toLowerCase().trim();
   const isTutor = currentSection === 'tutors';
 
@@ -222,6 +228,8 @@ function updateStats() {
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
+const TRASH_SVG   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>`;
+const RESTORE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
 const NOTE_SVG  = `<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
 const WA_SVG   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
 const MAIL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>`;
@@ -634,22 +642,68 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
 
 let _schedulePicker = null;
 
+function initTimeDrum(defHour, defMin, defAmpm) {
+  const ITEM_H = 48;
+  const hours   = Array.from({length:12}, (_,i) => String(i+1).padStart(2,'0'));
+  const minutes = Array.from({length:60}, (_,i) => String(i).padStart(2,'0'));
+
+  function buildCol(id, items, selIdx) {
+    const col = document.getElementById(id);
+    col.innerHTML = '';
+    // 2 pad items top/bottom so first/last item can scroll to center
+    [1,2].forEach(() => col.appendChild(Object.assign(document.createElement('div'),{className:'drum-item drum-pad'})));
+    items.forEach(v => {
+      const el = document.createElement('div');
+      el.className = 'drum-item';
+      el.textContent = v;
+      col.appendChild(el);
+    });
+    [1,2].forEach(() => col.appendChild(Object.assign(document.createElement('div'),{className:'drum-item drum-pad'})));
+    // +1 because 1 pad item sits above the highlight band at scrollTop=0
+    col.scrollTop = (selIdx + 1) * ITEM_H;
+  }
+
+  buildCol('drum-hour',   hours,   defHour - 1);
+  buildCol('drum-minute', minutes, defMin);
+  buildCol('drum-ampm',   ['AM','PM'], defAmpm === 'PM' ? 1 : 0);
+}
+
+function getDrumTime() {
+  const ITEM_H = 48;
+  function readIdx(id, len) {
+    const col = document.getElementById(id);
+    // subtract 1 pad item offset to get 0-based item index
+    return Math.max(0, Math.min(Math.round(col.scrollTop / ITEM_H) - 1, len - 1));
+  }
+  const h  = readIdx('drum-hour',   12) + 1;  // 1–12
+  const m  = readIdx('drum-minute', 60);       // 0–59
+  const ap = readIdx('drum-ampm',   2) === 1 ? 'PM' : 'AM';
+  return { h, m, ap };
+}
+
 function openScheduleModal(sheetRow, current) {
   const modal = document.getElementById('schedule-modal');
   modal.dataset.sheetRow = sheetRow;
 
   if (_schedulePicker) _schedulePicker.destroy();
   _schedulePicker = flatpickr('#schedule-date-input', {
-    enableTime: true,
-    dateFormat: 'd/m/Y H:i',
-    time_24hr: true,
-    minuteIncrement: 15,
+    dateFormat: 'd/m/Y',
     minDate: 'today',
     defaultDate: current ? parseDate(current) : null,
     disableMobile: true,
   });
 
+  let dh = 9, dm = 0, dap = 'AM';
+  if (current) {
+    const d = parseDate(current);
+    const raw = d.getHours();
+    dap = raw >= 12 ? 'PM' : 'AM';
+    dh  = raw % 12 || 12;
+    dm  = d.getMinutes();
+  }
   modal.style.display = 'flex';
+  // defer until modal is visible so scrollTop assignment takes effect
+  requestAnimationFrame(() => initTimeDrum(dh, dm, dap));
 }
 
 function closeScheduleModal() {
@@ -660,13 +714,18 @@ function closeScheduleModal() {
 async function saveInterviewSchedule() {
   const modal    = document.getElementById('schedule-modal');
   const sheetRow = parseInt(modal.dataset.sheetRow);
-  const d        = _schedulePicker && _schedulePicker.selectedDates[0];
-  if (!d) return;
+  const dateOnly = _schedulePicker && _schedulePicker.selectedDates[0];
+  if (!dateOnly) return;
+
+  const { h, m, ap } = getDrumTime();
+  const hours24 = (h % 12) + (ap === 'PM' ? 12 : 0);
+  const d = new Date(dateOnly);
+  d.setHours(hours24, m, 0, 0);
 
   const btn = modal.querySelector('.btn-schedule-save');
   btn.disabled = true;
   try {
-    const fmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
+    const fmt = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
     await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, 'Scheduled');
     await updateCell(sheetRow, C.INTERVIEW_AT     + 1, fmt);
     const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
@@ -711,6 +770,160 @@ async function logCall(sheetRow) {
     if (ri !== -1) allRows[ri][C.LAST_CALLED] = fmt;
   } catch (err) {
     // silent — call still proceeds even if log fails
+  }
+}
+
+// ── TRASH / BIN ───────────────────────────────────────────────────────────────
+async function ensureSheetIds() {
+  if (Object.keys(sheetIdMap).length) return;
+  const meta = await apiFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}?fields=sheets.properties`
+  );
+  (meta.sheets || []).forEach(s => {
+    sheetIdMap[s.properties.title] = s.properties.sheetId;
+  });
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function nowSheetFmt() {
+  const d = new Date();
+  return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+}
+
+async function trashCard(sheetRow, uid) {
+  const cfg = currentTabConfig();
+  const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row = allRows[ri];
+
+  const rowCopy = [...row];
+  const deletedAt = nowSheetFmt();
+  if (currentSection === 'tutors') {
+    rowCopy[C.DELETED_AT]    = deletedAt;
+    rowCopy[C.ORIGINAL_TAB]  = cfg.sheet;
+  } else {
+    rowCopy[CP.DELETED_AT]   = deletedAt;
+    rowCopy[CP.ORIGINAL_TAB] = cfg.sheet;
+  }
+
+  const binSheet = currentSection === 'tutors' ? SHEETS.TUTORS_BIN : SHEETS.PARENTS_BIN;
+
+  try {
+    await ensureSheetIds();
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(binSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
+    );
+    const srcId = sheetIdMap[cfg.sheet];
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: srcId, dimension: 'ROWS',
+        startIndex: sheetRow - 1, endIndex: sheetRow
+      }}}]})}
+    );
+    allRows.splice(ri, 1);
+    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    const rc = document.getElementById('result-count');
+    const label = currentSection === 'parents' ? 'contacts' : 'applications';
+    rc.textContent = `${allRows.length} ${label}`;
+  } catch (err) {
+    showError('Failed to move to bin: ' + err.message);
+  }
+}
+
+async function restoreCard(sheetRow, uid) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row = allRows[ri];
+
+  const destSheet = currentSection === 'tutors'
+    ? (cell(row, C.ORIGINAL_TAB)  || SHEETS.TUTORS_APPLIED)
+    : (cell(row, CP.ORIGINAL_TAB) || SHEETS.PARENTS_TO_CONTACT);
+
+  const rowCopy = [...row];
+  if (currentSection === 'tutors') {
+    rowCopy[C.DELETED_AT]   = '';
+    rowCopy[C.ORIGINAL_TAB] = '';
+  } else {
+    rowCopy[CP.DELETED_AT]   = '';
+    rowCopy[CP.ORIGINAL_TAB] = '';
+  }
+
+  try {
+    await ensureSheetIds();
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
+    );
+    const binSheet = currentSection === 'tutors' ? SHEETS.TUTORS_BIN : SHEETS.PARENTS_BIN;
+    const binId = sheetIdMap[binSheet];
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: binId, dimension: 'ROWS',
+        startIndex: sheetRow - 1, endIndex: sheetRow
+      }}}]})}
+    );
+    allRows.splice(ri, 1);
+    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    const label = currentSection === 'parents' ? 'contacts' : 'applications';
+    document.getElementById('result-count').textContent = `${allRows.length} ${label}`;
+  } catch (err) {
+    showError('Failed to restore: ' + err.message);
+  }
+}
+
+function daysLeft(deletedAtStr) {
+  const d    = parseDate(deletedAtStr);
+  if (!d.getTime()) return 30;
+  const diff = Math.floor((Date.now() - d.getTime()) / 86400000);
+  return Math.max(0, 30 - diff);
+}
+
+function appendBinRows() {
+  if (renderedCount >= filteredRows.length) return;
+  const tbody = document.getElementById('table-body');
+  const old = document.getElementById('scroll-sentinel');
+  if (old) old.remove();
+
+  const batch = filteredRows.slice(renderedCount, renderedCount + PAGE_SIZE);
+  batch.forEach((row, bi) => {
+    const fi       = renderedCount + bi;
+    const sheetRow = row._sheetRow;
+    const uid      = `r${fi}`;
+    const isTutor  = currentSection === 'tutors';
+    const name     = isTutor ? cell(row, C.NAME)  : cell(row, CP.NAME);
+    const phone    = isTutor ? cell(row, C.PHONE) : cell(row, CP.PHONE);
+    const deletedAt = isTutor ? cell(row, C.DELETED_AT) : cell(row, CP.DELETED_AT);
+    const origTab   = isTutor ? cell(row, C.ORIGINAL_TAB) : cell(row, CP.ORIGINAL_TAB);
+    const left     = daysLeft(deletedAt);
+    const leftCls  = left <= 7 ? 'days-left danger' : 'days-left';
+
+    const tr = document.createElement('tr');
+    tr.className = 'data-row bin-row';
+    tr.dataset.uid = uid;
+    tr.innerHTML = `
+      <td class="td-bin-info">
+        <span class="bin-name">${esc(name)}</span>
+        <span class="bin-meta">${esc(phone)}${origTab ? ` · from ${esc(origTab.replace(/Tutors |Parents /,''))}` : ''}</span>
+        <span class="${leftCls}">${left}d left</span>
+      </td>
+      <td class="td-bin-actions">
+        <button class="btn-restore" onclick="event.stopPropagation();restoreCard(${sheetRow},'${uid}')" title="Restore">
+          ${RESTORE_SVG} Restore
+        </button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  renderedCount += batch.length;
+
+  if (renderedCount < filteredRows.length) {
+    const sentinel = document.createElement('tr');
+    sentinel.id = 'scroll-sentinel';
+    tbody.appendChild(sentinel);
+    if (scrollObserver) scrollObserver.observe(sentinel);
   }
 }
 
