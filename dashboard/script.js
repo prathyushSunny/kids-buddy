@@ -256,6 +256,7 @@ function renderTable(filtered) {
 }
 
 function appendRows() {
+  if (currentTabConfig().isBin) return appendBinRows();
   if (currentSection === 'parents') return appendParentRows();
   if (renderedCount >= filteredRows.length) return;
 
@@ -316,6 +317,7 @@ function appendRows() {
         <div class="card-interview" data-sheet-row="${sheetRow}" data-iv-status="${esc(ivStatus)}" data-iv-at="${esc(ivAt)}">
           ${interviewStatusHTML(ivStatus, ivAt, sheetRow)}
         </div>
+        <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}</button>
       </td>
       <td class="td-date">${esc(submittedFmt)}</td>
       <td>
@@ -450,6 +452,7 @@ function appendParentRows() {
         <div class="card-notes" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
           ${notesInlineHTML(notes)}
         </div>
+        <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}</button>
       </td>
       <td class="td-date">${esc(dateFmt)}</td>
       <td>
@@ -643,7 +646,7 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
         <span class="iv-sep">|</span>
         <button class="btn-inline-text btn-inline-danger" onclick="event.stopPropagation();confirmCancelSchedule(${sheetRow})">Cancel</button>
       </span>
-      <button class="btn-wa-inline" onclick="event.stopPropagation();openWAShareFromCard(${sheetRow})">Share on WhatsApp</button>`;
+      <button class="btn-wa-inline" onclick="event.stopPropagation();openWAShareFromCard(${sheetRow})">Share Schedule on WhatsApp</button>`;
   }
   return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
 }

@@ -803,6 +803,31 @@
       text-decoration: underline; cursor: pointer; text-align: left;
     }
 
+    /* ── Trash button ── */
+    .btn-card-trash {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 10px; background: none; border: none; padding: 2px 4px;
+      font-size: 12px; color: var(--muted); cursor: pointer; border-radius: 4px;
+      opacity: 0.5; transition: opacity 0.15s, color 0.15s;
+    }
+    .btn-card-trash:hover { color: #e53e3e; opacity: 1; }
+
+    /* ── Bin rows ── */
+    .bin-row td { padding: 14px 16px; }
+    .td-bin-info { width: 100%; }
+    .bin-name { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
+    .bin-meta { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .days-left { display: inline-block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+    .days-left.danger { color: #e53e3e; }
+    .td-bin-actions { white-space: nowrap; vertical-align: middle; }
+    .btn-restore {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--primary);
+      background: #fff; color: var(--primary); font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .btn-restore:hover { background: #eef3fe; }
+
     /* ── Time Drum ── */
     .time-drum {
       display: flex; align-items: center;
