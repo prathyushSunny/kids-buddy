@@ -98,10 +98,9 @@ async function handleToken(resp) {
     }
 
     saveSession(resp.access_token, resp.expires_in || 3600, email);
-    document.getElementById('user-email').textContent = email;
-    document.getElementById('signin-screen').style.display = 'none';
-    document.getElementById('dashboard').style.display = 'block';
-    loadApplications();
+    // Reload so the inline FOUC script shows the dashboard instantly
+    // and window.onload loads data via the same reliable path used on every refresh.
+    window.location.reload();
   } catch (err) {
     showError('Could not verify your account: ' + err.message);
   }
