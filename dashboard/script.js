@@ -2,11 +2,60 @@
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let tokenClient;
-let accessToken   = null;
-let allRows       = [];
-let filteredRows  = [];
-let renderedCount = 0;
+let accessToken    = null;
+let allRows        = [];
+let filteredRows   = [];
+let renderedCount  = 0;
 let scrollObserver = null;
+
+let currentSection = 'tutors';   // 'tutors' | 'parents'
+let currentTabKey  = 'applied';  // key into SECTION_TABS[currentSection]
+
+const SECTION_TABS = {
+  tutors: [
+    { key: 'applied',    label: 'Applied',    sheet: SHEETS.TUTORS_APPLIED },
+    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.TUTORS_IN_LOOP },
+    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.TUTORS_ONBOARDED },
+    { key: 'bin',        label: 'Bin',        sheet: SHEETS.TUTORS_BIN,   isBin: true },
+  ],
+  parents: [
+    { key: 'to_contact', label: 'To-Contact', sheet: SHEETS.PARENTS_TO_CONTACT },
+    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.PARENTS_IN_LOOP },
+    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.PARENTS_ONBOARDED },
+    { key: 'bin',        label: 'Bin',        sheet: SHEETS.PARENTS_BIN, isBin: true },
+  ],
+};
+
+function currentTabConfig() {
+  return SECTION_TABS[currentSection].find(t => t.key === currentTabKey)
+      || SECTION_TABS[currentSection][0];
+}
+
+function switchSection(section) {
+  currentSection = section;
+  currentTabKey  = SECTION_TABS[section][0].key;
+  renderTabUI();
+  loadApplications();
+}
+
+function switchTab(key) {
+  currentTabKey = key;
+  renderTabUI();
+  loadApplications();
+}
+
+function renderTabUI() {
+  // Section segmented buttons
+  document.querySelectorAll('.section-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.section === currentSection);
+  });
+  // Sub-tabs — rebuild
+  const tabs = SECTION_TABS[currentSection];
+  document.getElementById('sub-tabs').innerHTML = tabs.map(t =>
+    `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}"
+      onclick="switchTab('${t.key}')">${t.label}</button>`
+  ).join('');
+}
 
 // ── SESSION STORAGE ───────────────────────────────────────────────────────────
 // Token + expiry stored for up to 1h (Google's hard limit).
@@ -43,6 +92,7 @@ window.onload = () => {
     document.getElementById('user-email').textContent = stored.email;
     document.getElementById('signin-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+    renderTabUI();
     loadApplications();
   }
 
@@ -119,45 +169,53 @@ async function loadApplications() {
   setTableMsg('Loading…');
   hideError();
 
+  const config  = currentTabConfig();
+  const colEnd  = currentSection === 'parents' ? 'Q' : 'AB';
+  const dateCol = currentSection === 'parents' ? CP.ONBOARDED_ON : C.SUBMITTED;
+
   try {
-    const range  = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!A2:U`);
+    const range  = encodeURIComponent(`${config.sheet}!A2:${colEnd}`);
     const url    = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
     const result = await apiFetch(url);
 
     allRows = (result.values || []).filter(r => r.length > 0);
-    // Stamp real sheet row number BEFORE sorting (row 1 = header, data starts at 2)
     allRows.forEach((row, i) => { row._sheetRow = i + 2; });
-    allRows.sort((a, b) => parseDate(cell(b, C.SUBMITTED)) - parseDate(cell(a, C.SUBMITTED)));
+    allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
     applyFilters();
   } catch (err) {
     showError('Failed to load data: ' + err.message);
-    setTableMsg('Could not load applications.');
+    setTableMsg('Could not load.');
   }
 }
 
 function applyFilters() {
-  const q = document.getElementById('search').value.toLowerCase().trim();
+  const q      = document.getElementById('search').value.toLowerCase().trim();
+  const isTutor = currentSection === 'tutors';
+
+  const searchCols = isTutor
+    ? [C.NAME, C.PHONE, C.EMAIL, C.COLLEGE, C.APP_ID]
+    : [CP.NAME, CP.PHONE, CP.EMAIL, CP.STUDENT_NAME, CP.LOCATION];
 
   const filtered = allRows.filter(r => {
     if (!q) return true;
-    const hay = [C.NAME, C.PHONE, C.EMAIL, C.COLLEGE, C.APP_ID]
-      .map(i => cell(r, i)).join(' ').toLowerCase();
-    return hay.includes(q);
+    return searchCols.map(i => cell(r, i)).join(' ').toLowerCase().includes(q);
   });
 
   updateStats();
   renderTable(filtered);
 
+  const label = currentSection === 'parents' ? 'contacts' : 'applications';
   const rc = document.getElementById('result-count');
   rc.textContent = filtered.length === allRows.length
-    ? `${allRows.length} applications`
-    : `${filtered.length} of ${allRows.length} applications`;
+    ? `${allRows.length} ${label}`
+    : `${filtered.length} of ${allRows.length} ${label}`;
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
 function updateStats() {
+  const contactedCol = currentSection === 'parents' ? CP.CONTACTED : C.CONTACTED;
   const total     = allRows.length;
-  const contacted = allRows.filter(r => (cell(r, C.CONTACTED) || 'No') === 'Yes').length;
+  const contacted = allRows.filter(r => cell(r, contactedCol) === 'Yes').length;
   document.getElementById('stat-total').textContent     = total;
   document.getElementById('stat-contacted').textContent = contacted;
   document.getElementById('stat-pending').textContent   = total - contacted;
@@ -187,6 +245,7 @@ function renderTable(filtered) {
 }
 
 function appendRows() {
+  if (currentSection === 'parents') return appendParentRows();
   if (renderedCount >= filteredRows.length) return;
 
   const tbody = document.getElementById('table-body');
@@ -318,6 +377,127 @@ function appendRows() {
   }
 }
 
+// ── PARENT CARD RENDERER ──────────────────────────────────────────────────────
+function appendParentRows() {
+  if (renderedCount >= filteredRows.length) return;
+
+  const tbody = document.getElementById('table-body');
+  const old = document.getElementById('scroll-sentinel');
+  if (old) old.remove();
+
+  const batch = filteredRows.slice(renderedCount, renderedCount + PAGE_SIZE);
+  batch.forEach((row, bi) => {
+    const fi       = renderedCount + bi;
+    const sheetRow = row._sheetRow;
+    const uid      = `p${fi}`;
+
+    const name      = cell(row, CP.NAME)      || '—';
+    const phone     = cell(row, CP.PHONE)     || '—';
+    const email     = cell(row, CP.EMAIL);
+    const contacted = cell(row, CP.CONTACTED) || 'No';
+    const notes     = cell(row, CP.NOTES);
+    const location  = cell(row, CP.LOCATION);
+    const student   = cell(row, CP.STUDENT_NAME);
+    const grade     = cell(row, CP.STUDENT_GRADE);
+    const subjects  = cell(row, CP.SUBJECTS_NEEDED);
+    const dateFmt   = formatDate(cell(row, CP.ONBOARDED_ON));
+
+    const digits = phone.replace(/\D/g, '');
+    const waNum  = digits.length === 10 ? '91' + digits : digits;
+    const waHref = digits
+      ? `https://wa.me/${waNum}?text=${encodeURIComponent('Hello ' + name + ', contacting you regarding home tuitions.')}`
+      : null;
+
+    const tr = document.createElement('tr');
+    tr.className = 'data-row';
+    tr.dataset.uid = uid;
+    tr.innerHTML = `
+      <td class="td-id"></td>
+      <td class="td-name">
+        <span class="card-applied-at">${esc(dateFmt)}</span>
+        ${esc(name)}
+      </td>
+      <td class="td-phone">
+        <span class="phone-num">${esc(phone)}</span>
+        <span class="contact-icons">
+          ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
+          ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
+          ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+        </span>
+      </td>
+      <td class="td-classes">
+        ${student ? `<span class="me-row">${esc(student)}${grade ? ` · Grade ${esc(grade)}` : ''}</span>` : ''}
+        <div class="mobile-extra">
+          ${subjects ? `<span class="me-row">${esc(subjects)}</span>` : ''}
+          ${location ? `<span class="me-row">${esc(location)}</span>` : ''}
+        </div>
+        <div class="card-notes" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
+          ${notesInlineHTML(notes)}
+        </div>
+      </td>
+      <td class="td-date">${esc(dateFmt)}</td>
+      <td>
+        <div class="toggle-wrap">
+          <span class="toggle-label">Contacted</span>
+          <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
+            data-sheet-row="${sheetRow}"
+            data-col="${CP.CONTACTED + 1}"
+            data-current="${esc(contacted)}"
+            onclick="event.stopPropagation(); handleToggle(this)">
+            <span class="pt-no">NO</span>
+            <span class="pt-yes">YES</span>
+          </button>
+        </div>
+      </td>
+      <td class="td-mail-sent"></td>
+      <td class="td-expand">
+        <button class="btn-expand" data-uid="${uid}" onclick="event.stopPropagation(); handleExpand(this)">
+          Full information <span class="expand-chevron"></span>
+        </button>
+      </td>`;
+    tr.onclick = () => toggleDetail(uid, tr);
+    tbody.appendChild(tr);
+
+    const dr = document.createElement('tr');
+    dr.className = 'detail-row';
+    dr.id = `detail-${uid}`;
+    dr.innerHTML = `
+      <td colspan="8">
+        <div class="detail-grid">
+          ${df('Onboarded On',   cell(row, CP.ONBOARDED_ON))}
+          ${df('Email',          email)}
+          ${df('Location',       location)}
+          ${df('Address',        cell(row, CP.ADDRESS))}
+          ${df('Student Name',   student)}
+          ${df('Student Grade',  grade)}
+          ${df('Subjects Needed', subjects)}
+          ${df('Assigned Tutor', cell(row, CP.ASSIGNED_TUTOR))}
+          ${df('Last Contacted', cell(row, CP.LAST_CONTACTED))}
+        </div>
+      </td>`;
+    tbody.appendChild(dr);
+  });
+
+  renderedCount += batch.length;
+
+  if (renderedCount < filteredRows.length) {
+    const sentinel = document.createElement('tr');
+    sentinel.id = 'scroll-sentinel';
+    sentinel.innerHTML = '<td colspan="8" style="padding:0;height:1px"></td>';
+    tbody.appendChild(sentinel);
+
+    if (!scrollObserver) {
+      scrollObserver = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) appendParentRows();
+      }, { rootMargin: '300px' });
+    }
+    scrollObserver.observe(sentinel);
+  } else if (scrollObserver) {
+    scrollObserver.disconnect();
+    scrollObserver = null;
+  }
+}
+
 function df(label, value) {
   return `<div class="detail-field"><label>${label}</label><span>${esc(value || '—')}</span></div>`;
 }
@@ -356,8 +536,12 @@ async function handleToggle(btn) {
 
     const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
     if (ri !== -1) {
-      if (colNum === C.CONTACTED + 1) allRows[ri][C.CONTACTED] = next;
-      if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT] = next;
+      if (currentSection === 'parents') {
+        if (colNum === CP.CONTACTED + 1) allRows[ri][CP.CONTACTED] = next;
+      } else {
+        if (colNum === C.CONTACTED + 1) allRows[ri][C.CONTACTED] = next;
+        if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT] = next;
+      }
     }
     updateStats();
   } catch (err) {
@@ -444,7 +628,8 @@ async function apiFetch(url, opts = {}) {
 
 async function updateCell(sheetRow, colNum, value) {
   const col   = numToCol(colNum - 1);
-  const range = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!${col}${sheetRow}`);
+  const sheet = currentTabConfig().sheet;
+  const range = encodeURIComponent(`${sheet}!${col}${sheetRow}`);
   const url   = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW`;
   await apiFetch(url, { method: 'PUT', body: JSON.stringify({ values: [[value]] }) });
 }

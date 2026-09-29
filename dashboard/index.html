@@ -94,6 +94,61 @@
     }
     .btn-signout:hover { background: var(--bg); }
 
+    /* ── Tab bar ── */
+    .tab-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px 0;
+      position: sticky;
+      top: 49px;
+      z-index: 9;
+    }
+
+    /* Section switcher — segmented control */
+    .section-tabs {
+      display: inline-flex;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 10px;
+      background: var(--bg);
+    }
+    .section-tab {
+      padding: 6px 20px;
+      font-size: 13px; font-weight: 600;
+      border: none; border-radius: 7px;
+      cursor: pointer; background: none;
+      color: var(--muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .section-tab.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* Sub-tabs — underline style, scrollable */
+    .sub-tabs {
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .sub-tabs::-webkit-scrollbar { display: none; }
+    .sub-tab {
+      padding: 8px 16px;
+      font-size: 13px; font-weight: 500;
+      border: none; background: none;
+      cursor: pointer; color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .sub-tab.active       { color: var(--primary); border-bottom-color: var(--primary); }
+    .sub-tab.bin-tab      { color: #ef4444; }
+    .sub-tab.bin-tab.active { border-bottom-color: #ef4444; }
+
     .main { max-width: 1440px; margin: 0 auto; padding: 24px; }
 
     /* ── Stats ── */
@@ -382,6 +437,11 @@
       .topbar { padding: 10px 16px; }
       #user-email { display: none; }
 
+      /* Tab bar — tighter on mobile, sticky offset matches slimmer topbar */
+      .tab-bar { top: 45px; padding: 8px 12px 0; }
+      .section-tab { padding: 5px 14px; font-size: 12px; }
+      .sub-tab { padding: 7px 14px; font-size: 12px; }
+
       /* Stats — keep 3-in-a-row but compact */
       .stats { gap: 8px; }
       .stat-card { padding: 10px 12px; }
@@ -652,11 +712,19 @@
 <!-- ── DASHBOARD ────────────────────────────────────────────────────────── -->
 <div id="dashboard">
   <div class="topbar">
-    <span class="topbar-title">📚 KidsBuddy — Applications</span>
+    <span class="topbar-title">📚 KidsBuddy</span>
     <div class="topbar-right">
       <span id="user-email"></span>
       <button class="btn-signout" onclick="signOut()">Sign out</button>
     </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="section-tabs">
+      <button class="section-tab active" data-section="tutors" onclick="switchSection('tutors')">Tutors</button>
+      <button class="section-tab" data-section="parents" onclick="switchSection('parents')">Parents</button>
+    </div>
+    <div class="sub-tabs" id="sub-tabs"></div>
   </div>
 
   <div class="main">
