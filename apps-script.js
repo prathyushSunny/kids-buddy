@@ -5,9 +5,9 @@ const PHONE_FIELD_TITLE = "Your contact number";
 const DEFAULT_COUNTRY_CODE = "91";
 
 const TARGET_SPREADSHEET_ID = "1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA";
-const TARGET_SHEET_NAME = "Primary target sheet";
+const TARGET_SHEET_NAME = "Tutors (Applied)";
 const SOURCE_SPREADSHEET_ID = "1dV81Xz5FnnN3OUrX9u1H_HtNpc0fiXeDA79gSjoi4c4";
-const SOURCE_SHEET_NAME = "Form responses 1";
+const SOURCE_SHEET_NAME = "Tutors Applications";
 
 const TARGET_HEADERS = [
   "App ID", "Submitted At", "Email", "Name", "Phone",
@@ -15,8 +15,31 @@ const TARGET_HEADERS = [
   "Travel Mode", "Classes", "Subjects", "Languages",
   "Extra Activities", "Available Timings", "Expected Pay",
   "Referral", "Open to Contact", "College / Work Timings",
-  "Contacted", "Notes", "Mail Sent"
+  "Contacted", "Notes", "Mail Sent",
+  "Last Called Date", "Interview Status", "Interview Scheduled At",
+  "Current Students", "Rating"
 ];
+
+// Headers for the Parents target sheets
+const TARGET_PARENTS_HEADERS = [
+  "Parent ID", "Onboarded On", "Customer Full Name", "Phone", "Email",
+  "Location", "Address", "Student Name", "Student Grade",
+  "Subjects Needed", "Assigned Tutor", "Last Contacted Date",
+  "Contacted", "Notes", "Mailed"
+];
+
+// Fill these in before running migrateParentsToSheet()
+const PARENTS_SOURCE_SPREADSHEET_ID = "PASTE_PARENTS_SOURCE_SPREADSHEET_ID_HERE";
+const PARENTS_SOURCE_SHEET_NAME     = "PASTE_PARENTS_SOURCE_SHEET_NAME_HERE";
+// Map: source column header → TARGET_PARENTS_HEADERS column name
+// Update these to match the exact header names in your source sheet
+const PARENTS_COLUMN_MAP = {
+  "Customer Full Name":             "Customer Full Name",
+  "Phone num":                      "Phone",
+  "Email":                          "Email",
+  "Location":                       "Location",
+  "Office/ House Address/ other details": "Address"
+};
 
 // Maps each target column to the exact form question it comes from.
 // getResponse() normalizes whitespace/case so minor header variations are tolerated.
@@ -157,6 +180,127 @@ function backfillParentToTarget() {
 }
 
 
+// ─── SCHEMA INIT ────────────────────────────────────────────────────────────
+
+/**
+ * One-time: adds any missing TARGET_HEADERS columns to all Tutors tabs.
+ * Safe to re-run — existing columns and data are never touched.
+ * Run manually from the Apps Script editor once after updating TARGET_HEADERS.
+ */
+function initTutorSchemaColumns() {
+  const ss      = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const tutorTabs = [
+    TARGET_SHEET_NAME,
+    "Tutors (In-Loop)",
+    "Tutors (Onboarded)",
+    "Tutors (Bin)"
+  ];
+
+  tutorTabs.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) {
+      Logger.log(`Skipped — sheet not found: ${tabName}`);
+      return;
+    }
+
+    const lastCol    = sheet.getLastColumn();
+    const existingHeaders = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim())
+      : [];
+
+    const headersToAdd = tabName === "Tutors (Bin)"
+      ? [...TARGET_HEADERS, "Deleted At", "Original Tab"]
+      : TARGET_HEADERS;
+
+    headersToAdd.forEach((header, i) => {
+      if (!existingHeaders.includes(header)) {
+        const col = existingHeaders.length + 1;
+        sheet.getRange(1, col).setValue(header).setFontWeight("bold");
+        existingHeaders.push(header);
+        Logger.log(`Added column "${header}" to "${tabName}" at col ${col}`);
+      }
+    });
+  });
+
+  Logger.log("initTutorSchemaColumns complete.");
+}
+
+
+/**
+ * One-time: migrates all parent records from the source spreadsheet into
+ * "Parents (To-Contact)". Fill in PARENTS_SOURCE_SPREADSHEET_ID and
+ * PARENTS_SOURCE_SHEET_NAME at the top before running.
+ *
+ * Uses a single batch setValues() call — handles 3700+ rows in one shot,
+ * well within Apps Script's 6-minute execution limit.
+ */
+function migrateParentsToSheet() {
+  if (PARENTS_SOURCE_SPREADSHEET_ID === "PASTE_PARENTS_SOURCE_SPREADSHEET_ID_HERE") {
+    throw new Error("Set PARENTS_SOURCE_SPREADSHEET_ID before running this function.");
+  }
+
+  const src   = SpreadsheetApp.openById(PARENTS_SOURCE_SPREADSHEET_ID)
+                              .getSheetByName(PARENTS_SOURCE_SHEET_NAME);
+  if (!src) throw new Error(`Source sheet "${PARENTS_SOURCE_SHEET_NAME}" not found.`);
+
+  const srcLastRow = src.getLastRow();
+  if (srcLastRow <= 1) { Logger.log("No data rows in source."); return; }
+
+  const srcLastCol = src.getLastColumn();
+  const srcHeaders = src.getRange(1, 1, 1, srcLastCol).getValues()[0].map(h => String(h).trim());
+  const srcData    = src.getRange(2, 1, srcLastRow - 1, srcLastCol).getDisplayValues();
+
+  const ss     = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const target = ss.getSheetByName("Parents (To-Contact)");
+  if (!target) throw new Error('Sheet "Parents (To-Contact)" not found in target spreadsheet.');
+
+  // Write headers if sheet is empty
+  if (target.getLastRow() === 0) {
+    target.appendRow(TARGET_PARENTS_HEADERS);
+    target.getRange(1, 1, 1, TARGET_PARENTS_HEADERS.length).setFontWeight("bold");
+    target.setFrozenRows(1);
+  }
+
+  // Bail if data already exists — this is a one-time migration
+  if (target.getLastRow() > 1) {
+    Logger.log(`Target already has ${target.getLastRow() - 1} rows. Delete them first to re-run.`);
+    return;
+  }
+
+  // Build all rows in memory, then write in one batch
+  let parentIdCounter = 1;
+  const rows = srcData.map(srcRow => {
+    const srcMap = {};
+    srcHeaders.forEach((h, i) => { srcMap[h] = String(srcRow[i] || "").trim(); });
+
+    const parentId = "KB-P-" + String(parentIdCounter++).padStart(4, "0");
+    const importedAt = new Date().toLocaleDateString("en-IN"); // DD/MM/YYYY
+
+    return TARGET_PARENTS_HEADERS.map(header => {
+      if (header === "Parent ID")           return parentId;
+      if (header === "Onboarded On")        return importedAt;
+      if (header === "Contacted")           return "No";
+      if (header === "Notes")               return "";
+      if (header === "Mailed")              return "No";
+      if (header === "Student Name")        return "";
+      if (header === "Student Grade")       return "";
+      if (header === "Subjects Needed")     return "";
+      if (header === "Assigned Tutor")      return "";
+      if (header === "Last Contacted Date") return "";
+
+      const srcKey = Object.keys(PARENTS_COLUMN_MAP).find(
+        k => PARENTS_COLUMN_MAP[k] === header
+      );
+      return srcKey ? (srcMap[srcKey] || "") : "";
+    });
+  });
+
+  // Single batch write — fast even for 3700+ rows
+  target.getRange(2, 1, rows.length, TARGET_PARENTS_HEADERS.length).setValues(rows);
+  Logger.log(`migrateParentsToSheet complete — ${rows.length} rows written.`);
+}
+
+
 // ─── TARGET SHEET HELPERS ───────────────────────────────────────────────────
 
 function getOrCreateTargetSheet() {
@@ -212,10 +356,15 @@ function generateAppId(sheet) {
  */
 function buildTargetRow(namedValues, appId) {
   return TARGET_HEADERS.map(header => {
-    if (header === "App ID")    return appId;
-    if (header === "Contacted") return "No";
-    if (header === "Notes")     return "";
-    if (header === "Mail Sent") return "No";
+    if (header === "App ID")                return appId;
+    if (header === "Contacted")             return "No";
+    if (header === "Notes")                 return "";
+    if (header === "Mail Sent")             return "No";
+    if (header === "Last Called Date")      return "";
+    if (header === "Interview Status")      return "";
+    if (header === "Interview Scheduled At") return "";
+    if (header === "Current Students")      return "";
+    if (header === "Rating")                return "";
 
     const formQuestion = TARGET_TO_FORM[header];
     if (!formQuestion) return "";
