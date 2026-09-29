@@ -9,6 +9,22 @@
   <link rel="icon" type="image/png" sizes="16x16" href="favicon_io/favicon-16x16.png">
   <link rel="apple-touch-icon" href="favicon_io/apple-touch-icon.png">
   <link rel="manifest" href="favicon_io/site.webmanifest">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    /* ── Flatpickr theme overrides ── */
+    .flatpickr-calendar { font-family: inherit; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.14); border: none; }
+    .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #4f8ef7; border-color: #4f8ef7; }
+    .flatpickr-day:hover { background: #e8f0fe; }
+    .flatpickr-day.today { border-color: #4f8ef7; }
+    .flatpickr-day.today:hover { background: #4f8ef7; color: #fff; border-color: #4f8ef7; }
+    .flatpickr-months .flatpickr-month { background: #4f8ef7; border-radius: 12px 12px 0 0; }
+    .flatpickr-months .flatpickr-prev-month, .flatpickr-months .flatpickr-next-month { color: #fff; fill: #fff; }
+    .flatpickr-current-month { color: #fff; }
+    .flatpickr-current-month .flatpickr-monthDropdown-months { color: #fff; }
+    .flatpickr-weekday { color: #6b7280; font-weight: 600; }
+    .flatpickr-time input { font-family: inherit; font-size: 15px; }
+    .flatpickr-time .flatpickr-time-separator { color: #6b7280; }
+  </style>
   <style>
     :root {
       --bg:       #f5f6fa;
@@ -842,7 +858,7 @@
   <div class="modal-card" onclick="event.stopPropagation()">
     <h3 class="modal-title">Schedule a Visit</h3>
     <label class="modal-label" for="schedule-date-input">Date &amp; Time</label>
-    <input id="schedule-date-input" type="datetime-local" class="modal-input">
+    <input id="schedule-date-input" type="text" class="modal-input" placeholder="Pick a date & time" readonly>
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="closeScheduleModal()">Cancel</button>
       <button class="btn-schedule-save" onclick="saveInterviewSchedule()">Schedule</button>
@@ -850,6 +866,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="constants.js" defer></script>
 <script src="script.js" defer></script>

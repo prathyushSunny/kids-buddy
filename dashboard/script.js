@@ -632,35 +632,40 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
   return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
 }
 
+let _schedulePicker = null;
+
 function openScheduleModal(sheetRow, current) {
   const modal = document.getElementById('schedule-modal');
   modal.dataset.sheetRow = sheetRow;
-  const inp = document.getElementById('schedule-date-input');
-  if (current) {
-    const d = parseDate(current);
-    inp.value = d.toISOString().slice(0, 16);
-  } else {
-    inp.value = '';
-  }
+
+  if (_schedulePicker) _schedulePicker.destroy();
+  _schedulePicker = flatpickr('#schedule-date-input', {
+    enableTime: true,
+    dateFormat: 'd/m/Y H:i',
+    time_24hr: true,
+    minuteIncrement: 15,
+    minDate: 'today',
+    defaultDate: current ? parseDate(current) : null,
+    disableMobile: true,
+  });
+
   modal.style.display = 'flex';
-  inp.focus();
 }
 
 function closeScheduleModal() {
   document.getElementById('schedule-modal').style.display = 'none';
+  if (_schedulePicker) { _schedulePicker.destroy(); _schedulePicker = null; }
 }
 
 async function saveInterviewSchedule() {
   const modal    = document.getElementById('schedule-modal');
   const sheetRow = parseInt(modal.dataset.sheetRow);
-  const val      = document.getElementById('schedule-date-input').value;
-  if (!val) return;
+  const d        = _schedulePicker && _schedulePicker.selectedDates[0];
+  if (!d) return;
 
   const btn = modal.querySelector('.btn-schedule-save');
   btn.disabled = true;
   try {
-    // Format as DD/MM/YYYY HH:MM:SS to match sheet locale
-    const d = new Date(val);
     const fmt = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
     await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, 'Scheduled');
     await updateCell(sheetRow, C.INTERVIEW_AT     + 1, fmt);
