@@ -635,7 +635,11 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
     }
     return `
       <span class="iv-chip iv-scheduled">📅 ${esc(dateLbl)}</span>
-      <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">Change</button>`;
+      <span class="iv-actions">
+        <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">Change</button>
+        <span class="iv-sep">|</span>
+        <button class="btn-inline-text btn-inline-danger" onclick="event.stopPropagation();confirmCancelSchedule(${sheetRow})">Cancel</button>
+      </span>`;
   }
   return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
 }
@@ -709,6 +713,39 @@ function openScheduleModal(sheetRow, current) {
 function closeScheduleModal() {
   document.getElementById('schedule-modal').style.display = 'none';
   if (_schedulePicker) { _schedulePicker.destroy(); _schedulePicker = null; }
+}
+
+function showConfirm(message, onOk) {
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-msg').textContent = message;
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.onclick = () => { closeConfirmModal(); onOk(); };
+  modal.style.display = 'flex';
+}
+function closeConfirmModal() {
+  document.getElementById('confirm-modal').style.display = 'none';
+}
+
+async function confirmCancelSchedule(sheetRow) {
+  showConfirm('Cancel this scheduled visit?', async () => {
+    try {
+      await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, '');
+      await updateCell(sheetRow, C.INTERVIEW_AT     + 1, '');
+      const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+      if (ri !== -1) {
+        allRows[ri][C.INTERVIEW_STATUS] = '';
+        allRows[ri][C.INTERVIEW_AT]     = '';
+      }
+      const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
+      if (container) {
+        container.dataset.ivStatus = '';
+        container.dataset.ivAt     = '';
+        container.innerHTML = interviewStatusHTML('', '', sheetRow);
+      }
+    } catch (err) {
+      showError('Failed to cancel visit: ' + err.message);
+    }
+  });
 }
 
 async function saveInterviewSchedule() {

@@ -745,6 +745,18 @@
       font-size: 14px; font-weight: 600; cursor: pointer;
     }
     .btn-schedule-save:disabled { opacity: 0.55; cursor: default; }
+    /* confirm modal */
+    .modal-card-sm { max-width: 300px; }
+    .confirm-msg { font-size: 15px; color: var(--text); margin-bottom: 18px; line-height: 1.45; }
+    .btn-confirm-ok {
+      flex: 1; padding: 10px 0; border-radius: 8px; font-size: 14px; font-weight: 600;
+      background: #e53e3e; color: #fff; border: none; cursor: pointer;
+    }
+    .btn-confirm-ok:hover { background: #c53030; }
+    /* inline cancel link */
+    .iv-actions { display: inline-flex; align-items: center; gap: 4px; }
+    .iv-sep { color: var(--muted); font-size: 12px; }
+    .btn-inline-danger { color: #e53e3e !important; }
 
     /* ── Time Drum ── */
     .time-drum {
@@ -889,6 +901,17 @@
           <tr><td colspan="8" class="state-msg">Loading…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Generic Confirm Modal -->
+<div id="confirm-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeConfirmModal()">
+  <div class="modal-card modal-card-sm" onclick="event.stopPropagation()">
+    <p class="confirm-msg" id="confirm-msg"></p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn-confirm-ok" id="confirm-ok-btn">Confirm</button>
     </div>
   </div>
 </div>
