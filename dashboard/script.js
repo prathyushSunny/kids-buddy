@@ -288,7 +288,7 @@ function appendRows() {
       <td class="td-phone">
         <span class="phone-num">${esc(phone)}</span>
         <span class="contact-icons">
-          ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
+          ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow})" title="Call">${CALL_SVG}</a>` : ''}
           ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
           ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
         </span>
@@ -694,6 +694,18 @@ async function markInterview(sheetRow, result) {
     }
   } catch (err) {
     showError('Failed to update interview status: ' + err.message);
+  }
+}
+
+async function logCall(sheetRow) {
+  try {
+    const now = new Date();
+    const fmt = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:00`;
+    await updateCell(sheetRow, C.LAST_CALLED + 1, fmt);
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) allRows[ri][C.LAST_CALLED] = fmt;
+  } catch (err) {
+    // silent — call still proceeds even if log fails
   }
 }
 
