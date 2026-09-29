@@ -72,15 +72,14 @@ async function handleToken(resp) {
     return;
   }
 
-  // Google's granular-permissions UI lets users uncheck individual scopes.
-  // If Sheets scope was unchecked every API call will 403 — catch it here
-  // before saving the session so the user gets a clear prompt to retry.
+  // Google's granular-permissions UI unchecks scopes by default on first
+  // encounter. If Sheets was unchecked the token arrives without it.
+  // Auto-retry immediately with prompt:'consent' — Google will show the
+  // scope screen again with the checkbox pre-checked (Screen 2 the user sees).
   const granted = (resp.scope || '').split(' ');
   if (!granted.includes('https://www.googleapis.com/auth/spreadsheets')) {
-    showError(
-      'Sheets access was not granted. Please sign in again and make sure ' +
-      'the "Google Sheets" checkbox is checked on the permissions screen.'
-    );
+    showError('Almost there — please check the "Google Sheets" checkbox on the next screen and click Continue.');
+    tokenClient.requestAccessToken({ prompt: 'consent' });
     return;
   }
 
