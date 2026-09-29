@@ -72,6 +72,18 @@ async function handleToken(resp) {
     return;
   }
 
+  // Google's granular-permissions UI lets users uncheck individual scopes.
+  // If Sheets scope was unchecked every API call will 403 — catch it here
+  // before saving the session so the user gets a clear prompt to retry.
+  const granted = (resp.scope || '').split(' ');
+  if (!granted.includes('https://www.googleapis.com/auth/spreadsheets')) {
+    showError(
+      'Sheets access was not granted. Please sign in again and make sure ' +
+      'the "Google Sheets" checkbox is checked on the permissions screen.'
+    );
+    return;
+  }
+
   accessToken = resp.access_token;
 
   try {
@@ -414,7 +426,21 @@ async function apiFetch(url, opts = {}) {
       ...(opts.headers || {})
     }
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    // Stored session token may lack the Sheets scope (user unchecked it during
+    // a previous login). Clear the session so the next sign-in re-requests it.
+    if (res.status === 403 && text.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT')) {
+      clearSession();
+      showError(
+        'This session is missing Sheets permission. ' +
+        'Please sign in again and check the "Google Sheets" checkbox.'
+      );
+      setTimeout(signOut, 1500);
+      throw new Error('Insufficient scope');
+    }
+    throw new Error(`HTTP ${res.status}: ${text}`);
+  }
   return res.json();
 }
 
