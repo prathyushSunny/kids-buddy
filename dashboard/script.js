@@ -10,8 +10,11 @@ let scrollObserver = null;
 
 let currentSection = 'tutors';   // 'tutors' | 'parents'
 let currentTabKey  = 'applied';  // key into SECTION_TABS[currentSection]
-let sheetIdMap     = {};         // sheet name → numeric sheetId (lazy-loaded)
+let sheetIdMap      = {};         // sheet name → numeric sheetId (lazy-loaded)
 let _searchDebounce = null;
+let _parentCache    = [];         // cached parent rows for WA search
+let _waParentMatches = [];        // last search results (for selection by index)
+let _waShareData    = {};         // { tutorName, tutorPhone, tutorRow, dateStr, parentName, parentPhone, studentName }
 
 const SECTION_TABS = {
   tutors: [
@@ -639,7 +642,8 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
         <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">Change</button>
         <span class="iv-sep">|</span>
         <button class="btn-inline-text btn-inline-danger" onclick="event.stopPropagation();confirmCancelSchedule(${sheetRow})">Cancel</button>
-      </span>`;
+      </span>
+      <button class="btn-wa-inline" onclick="event.stopPropagation();openWAShareFromCard(${sheetRow})">Share on WhatsApp</button>`;
   }
   return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
 }
@@ -748,6 +752,101 @@ async function confirmCancelSchedule(sheetRow) {
   });
 }
 
+// ── WA SHARE ──────────────────────────────────────────────────────────────────
+async function ensureParentCache() {
+  if (_parentCache.length) return;
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.PARENTS_TO_CONTACT)}!A:Q`;
+    const res = await apiFetch(url);
+    _parentCache = (res.values || []).slice(1).filter(r => r.length > 0);
+  } catch { _parentCache = []; }
+}
+
+function openWAShareModal(tutorName, tutorPhone, dateStr) {
+  _waShareData = { tutorName, tutorPhone, dateStr, parentName: '', parentPhone: '', studentName: '' };
+  _waParentMatches = [];
+
+  document.getElementById('wa-date-chip').textContent    = '📅 ' + formatDate(dateStr);
+  document.getElementById('wa-tutor-row').textContent    = tutorName + (tutorPhone ? ' · ' + tutorPhone : '');
+  document.getElementById('wa-parent-search').value      = '';
+  document.getElementById('wa-parent-dropdown').style.display = 'none';
+  document.getElementById('wa-selected-parent').style.display = 'none';
+  document.getElementById('btn-send-parent').disabled    = true;
+
+  document.getElementById('wa-share-modal').style.display = 'flex';
+  ensureParentCache();
+}
+
+function openWAShareFromCard(sheetRow) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row = allRows[ri];
+  const name    = cell(row, C.NAME);
+  const phone   = cell(row, C.PHONE);
+  const dateStr = cell(row, C.INTERVIEW_AT);
+  openWAShareModal(name, phone, dateStr);
+}
+
+function closeWAShareModal() {
+  document.getElementById('wa-share-modal').style.display = 'none';
+}
+
+function searchParentsForWA(q) {
+  const dd = document.getElementById('wa-parent-dropdown');
+  if (!q.trim()) { dd.innerHTML = ''; dd.style.display = 'none'; return; }
+
+  _waParentMatches = _parentCache.filter(r => {
+    return [cell(r, CP.NAME), cell(r, CP.PHONE), cell(r, CP.STUDENT_NAME)]
+      .join(' ').toLowerCase().includes(q.toLowerCase());
+  }).slice(0, 6);
+
+  if (!_waParentMatches.length) {
+    dd.innerHTML = `<div class="wa-dd-empty">No parents found</div>`;
+    dd.style.display = 'block';
+    return;
+  }
+  dd.innerHTML = _waParentMatches.map((r, i) => `
+    <div class="wa-dd-item" onclick="selectWAParent(${i})">
+      <span class="wa-dd-name">${esc(cell(r, CP.NAME))}</span>
+      <span class="wa-dd-sub">${esc(cell(r, CP.STUDENT_NAME) || '')}${cell(r, CP.PHONE) ? ' · ' + esc(cell(r, CP.PHONE)) : ''}</span>
+    </div>`).join('');
+  dd.style.display = 'block';
+}
+
+function selectWAParent(idx) {
+  const r = _waParentMatches[idx];
+  if (!r) return;
+  _waShareData.parentName    = cell(r, CP.NAME);
+  _waShareData.parentPhone   = cell(r, CP.PHONE);
+  _waShareData.studentName   = cell(r, CP.STUDENT_NAME);
+
+  document.getElementById('wa-parent-search').value        = '';
+  document.getElementById('wa-parent-dropdown').style.display = 'none';
+  const sel = document.getElementById('wa-selected-parent');
+  sel.textContent    = _waShareData.parentName + (_waShareData.studentName ? ' · Student: ' + _waShareData.studentName : '') + (_waShareData.parentPhone ? ' · ' + _waShareData.parentPhone : '');
+  sel.style.display  = 'block';
+  document.getElementById('btn-send-parent').disabled = false;
+}
+
+function buildWAMessage(role) {
+  const { tutorName, tutorPhone, parentName, parentPhone, studentName, dateStr } = _waShareData;
+  const date = formatDate(dateStr);
+  if (role === 'tutor') {
+    return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n📞 Parent: ${parentName || '—'}${parentPhone ? ' · ' + parentPhone : ''}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
+  }
+  return `Hi ${parentName}! 👋\n\n*KidsBuddy* has arranged a tutor visit at your home:\n\n📅 ${date}\n👩‍🏫 Tutor: ${tutorName || '—'}${tutorPhone ? ' · ' + tutorPhone : ''}\n\nPlease ensure someone is available. Thank you!\n— KidsBuddy Team`;
+}
+
+function sendWATo(role) {
+  const phone = role === 'tutor' ? _waShareData.tutorPhone : _waShareData.parentPhone;
+  if (!phone) return;
+  const digits = phone.replace(/\D/g,'');
+  const num    = digits.length === 10 ? '91' + digits : digits;
+  const msg    = encodeURIComponent(buildWAMessage(role));
+  window.open(`https://wa.me/${num}?text=${msg}`, '_blank', 'noopener');
+  // modal stays open intentionally
+}
+
 async function saveInterviewSchedule() {
   const modal    = document.getElementById('schedule-modal');
   const sheetRow = parseInt(modal.dataset.sheetRow);
@@ -777,6 +876,12 @@ async function saveInterviewSchedule() {
       container.innerHTML = interviewStatusHTML('Scheduled', fmt, sheetRow);
     }
     closeScheduleModal();
+    // open WA share flow
+    const ri2 = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri2 !== -1) {
+      const r = allRows[ri2];
+      openWAShareModal(cell(r, C.NAME), cell(r, C.PHONE), fmt);
+    }
   } catch (err) {
     showError('Failed to save interview date: ' + err.message);
   }
