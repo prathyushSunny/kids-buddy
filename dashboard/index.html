@@ -201,6 +201,7 @@
     .td-name  { font-weight: 600; }
     .td-id    { font-size: 12px; color: var(--muted); }
     .td-date  { font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .card-applied-at { display: none; } /* hidden on desktop — date shown in table column */
     .td-phone { font-family: monospace; font-size: 13px; }
 
     .wa-link {
@@ -412,7 +413,7 @@
       /* Each data row becomes a card */
       tr.data-row {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr;
         grid-template-rows: auto auto auto;
         gap: 3px 10px;
         background: white;
@@ -422,6 +423,7 @@
         box-shadow: var(--shadow);
         cursor: pointer;
         transition: background 0.1s;
+        position: relative;
       }
       tr.data-row:hover    { background: white; }
       tr.data-row.expanded {
@@ -441,6 +443,7 @@
       tr.data-row td:nth-child(2) {
         grid-column: 1; grid-row: 1;
         font-size: 15px; font-weight: 700; line-height: 1.3;
+        padding-right: 90px;
       }
 
       /* Phone + WhatsApp — col 1 row 2 */
@@ -455,28 +458,24 @@
         font-size: 12px; color: var(--muted); padding-top: 3px;
       }
 
-      /* Submitted date — bottom-right of card */
-      tr.data-row td:nth-child(5) {
-        grid-column: 2; grid-row: 4;
+      /* Submitted date td — hidden on mobile (shown inline above name instead) */
+      tr.data-row td:nth-child(5) { display: none; }
+
+      /* Applied-at label above name */
+      .card-applied-at {
+        display: block;
         font-size: 11px; color: var(--muted);
-        text-align: right; align-self: end;
+        margin-bottom: 6px;
       }
 
-      /* Contacted toggle — col 2 row 1 */
+      /* Contacted toggle — absolute top-right, no grid impact */
       tr.data-row td:nth-child(6) {
-        grid-column: 2; grid-row: 1;
-        display: flex; justify-content: flex-end; align-items: flex-start;
-      }
-
-      /* Mail Sent toggle — col 2 row 2 */
-      tr.data-row td:nth-child(7) {
-        grid-column: 2; grid-row: 2;
-        display: flex; justify-content: flex-end; align-items: flex-start;
-        padding-top: 3px;
+        position: absolute; top: 14px; right: 14px;
+        display: flex; flex-direction: column; align-items: flex-end;
       }
 
       /* Mail Sent — hidden on mobile (stays in sheet) */
-      tr.data-row td.td-mail-sent { display: none; }
+      tr.data-row td:nth-child(7) { display: none; }
 
       /* Expand button — full width, row 5 */
       tr.data-row td.td-expand {
@@ -500,13 +499,13 @@
       }
       .pill-toggle .pt-yes,
       .pill-toggle .pt-no  { display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 5px 10px; font-size: 11px; font-weight: 700; }
-      /* YES active */
+      /* YES active — YES is right span (NO|YES order) */
       .pill-toggle.yes { border-color: #16a34a; }
-      .pill-toggle.yes .pt-yes { background: #dcfce7; color: #16a34a; border-radius: 20px 0 0 20px; }
+      .pill-toggle.yes .pt-yes { background: #dcfce7; color: #16a34a; border-radius: 0 20px 20px 0; }
       .pill-toggle.yes .pt-no  { background: #fff;    color: #9ca3af; }
-      /* NO active */
+      /* NO active — NO is left span */
       .pill-toggle.no  { border-color: #dc2626; }
-      .pill-toggle.no  .pt-no  { background: #fef2f2; color: #dc2626; border-radius: 0 20px 20px 0; }
+      .pill-toggle.no  .pt-no  { background: #fef2f2; color: #dc2626; border-radius: 20px 0 0 20px; }
       .pill-toggle.no  .pt-yes { background: #fff;    color: #9ca3af; }
 
       /* Mobile-extra: subjects + location below classes */
@@ -544,6 +543,71 @@
       /* State message */
       .state-msg { padding: 40px 16px; }
     }
+
+    /* ── Inline notes (shared, inside card) ─────────────────────────── */
+    .card-notes { margin-top: 8px; }
+
+    /* Box shown when notes exist — clickable to edit */
+    .card-notes-box {
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card-notes-header {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px;
+      background: #e8edf5;
+      border-bottom: 1px solid #dde3ec;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .card-notes-body {
+      background: #f2f5f9;
+      padding: 8px 10px;
+    }
+    .card-notes-box:hover .card-notes-header { background: #dde4ef; }
+    .card-notes-box:hover .card-notes-body   { background: #eaeff6; }
+    .notes-text {
+      display: block;
+      white-space: pre-wrap;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 4px;
+    }
+    .btn-inline-text {
+      background: none; border: none; padding: 0;
+      font-size: 11px; color: #6366f1; text-decoration: underline;
+      text-underline-offset: 2px; cursor: pointer;
+    }
+    /* Empty state — just an underlined link, no box */
+    .btn-add-notes { font-size: 12px; }
+    .card-notes-ta {
+      width: 100%; box-sizing: border-box;
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px; font-size: 13px; resize: vertical;
+      font-family: inherit; min-height: 64px;
+      outline: none;
+    }
+    .card-notes-ta:focus { border-color: #6366f1; }
+    .card-notes-actions {
+      display: flex; gap: 6px; margin-top: 6px;
+    }
+    .btn-notes-save {
+      background: #6366f1; color: white; border: none;
+      border-radius: 6px; padding: 4px 12px; font-size: 12px;
+      cursor: pointer; font-weight: 600;
+    }
+    .btn-notes-save:hover  { background: #4f46e5; }
+    .btn-notes-save:disabled { opacity: 0.5; cursor: default; }
+    .btn-notes-cancel {
+      background: none; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px; font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-notes-cancel:hover { background: #f1f5f9; }
   </style>
 </head>
 <body>
@@ -617,14 +681,6 @@
       <input class="search-input" id="search"
         placeholder="Search name, phone, email, college…"
         oninput="applyFilters()">
-      <select id="filter-contacted" onchange="applyFilters()">
-        <option value="">All — Contacted</option>
-        <option value="No">Not contacted</option>
-        <option value="Yes">Contacted</option>
-      </select>
-      <select id="filter-classes" onchange="applyFilters()">
-        <option value="">All — Classes</option>
-      </select>
       <button class="btn" onclick="loadApplications()">↻ Refresh</button>
     </div>
 
