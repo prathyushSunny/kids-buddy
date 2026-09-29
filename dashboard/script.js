@@ -1,21 +1,4 @@
-// ── CONFIG ────────────────────────────────────────────────────────────────────
-const CLIENT_ID      = '993142394562-4lrr9i1rvgu0d9kpou03tu6h6pm3jlhm.apps.googleusercontent.com';
-const SPREADSHEET_ID = '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA';
-const SHEET_NAME     = 'Tutors (Applied)';
-const PAGE_SIZE      = 25;
-const ALLOWED_EMAILS = [
-  'kids.buddy.hometution@gmail.com',
-  's.kumari.shirisha@gmail.com'
-];
-
-// 0-based column indices matching TARGET_HEADERS in apps-script.js
-const C = {
-  APP_ID:0, SUBMITTED:1, EMAIL:2, NAME:3, PHONE:4,
-  STUDENT:5, COLLEGE:6, LOCATION:7, TRAVEL:8,
-  CLASSES:9, SUBJECTS:10, LANGUAGES:11, EXTRAS:12,
-  TIMINGS:13, PAY:14, REFERRAL:15, OPEN:16, WORKHOURS:17,
-  CONTACTED:18, NOTES:19, MAIL_SENT:20
-};
+// constants.js loaded before this file — CLIENT_ID, SPREADSHEET_ID, SHEETS, C, PAGE_SIZE, ALLOWED_EMAILS
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let tokenClient;
@@ -126,7 +109,7 @@ async function loadApplications() {
   hideError();
 
   try {
-    const range  = encodeURIComponent(`${SHEET_NAME}!A2:U`);
+    const range  = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!A2:U`);
     const url    = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
     const result = await apiFetch(url);
 
@@ -437,7 +420,7 @@ async function apiFetch(url, opts = {}) {
 
 async function updateCell(sheetRow, colNum, value) {
   const col   = numToCol(colNum - 1);
-  const range = encodeURIComponent(`${SHEET_NAME}!${col}${sheetRow}`);
+  const range = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!${col}${sheetRow}`);
   const url   = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW`;
   await apiFetch(url, { method: 'PUT', body: JSON.stringify({ values: [[value]] }) });
 }
