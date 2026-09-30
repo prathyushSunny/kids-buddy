@@ -8,7 +8,12 @@ const ALLOWED_EMAILS = [
 ];
 
 // ── SPREADSHEET ───────────────────────────────────────────────────────────────
-const SPREADSHEET_ID = '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA';
+// ENV: swap to PROD before pushing, revert to STAGING after
+const _IDS = {
+  STAGING: '1vnQWp10y3hzudckvRPGYVpnr6TS0rnXE6ytunrNI9-U',
+  PROD:    '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA',
+};
+const SPREADSHEET_ID = _IDS.PROD; // <<ENV>>
 
 const SHEETS = {
   TUTORS_APPLIED:     'Tutors (Applied)',
@@ -34,8 +39,9 @@ const C = {
   CALENDAR_EVENT_ID:26,
   STATUS:27,
   SCHEDULED_PARENT:28,
-  SOURCE:29,
-  // Bin-only columns (DELETED_AT/ORIGINAL_TAB share indices with SCHEDULED_PARENT/SOURCE — different sheets, never mixed)
+  _UNUSED_COL_29:29,
+  SOURCE:30,
+  // Bin-only columns: DELETED_AT overwrites SCHEDULED_PARENT (28), ORIGINAL_TAB overwrites col 29; SOURCE stays at 30
   DELETED_AT:28, ORIGINAL_TAB:29
 };
 
@@ -49,6 +55,9 @@ const CP = {
   // Bin-only columns
   DELETED_AT:16, ORIGINAL_TAB:17
 };
+
+// ── GOOGLE MAPS ───────────────────────────────────────────────────────────────
+const MAPS_API_KEY = ''; // <<MAPS_API_KEY>> Paste your Maps JavaScript API key here
 
 // ── PAGINATION ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25;

@@ -5,6 +5,7 @@ const PHONE_FIELD_TITLE = "Your contact number";
 const DEFAULT_COUNTRY_CODE = "91";
 
 const TARGET_SPREADSHEET_ID = "1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA";
+const STAGING_SPREADSHEET_ID = "1vnQWp10y3hzudckvRPGYVpnr6TS0rnXE6ytunrNI9-U";
 const TARGET_SHEET_NAME = "Tutors (Applied)";
 const SOURCE_SPREADSHEET_ID = "1dV81Xz5FnnN3OUrX9u1H_HtNpc0fiXeDA79gSjoi4c4";
 const SOURCE_SHEET_NAME = "Tutors Applications";
@@ -95,18 +96,28 @@ function sendFormToDiscord(e) {
     );
   }
 
-  const submission = createOrderedSubmissionFromEvent(e);
+  // e.namedValues is provided by Google and maps question titles → [answer]
+  // reliably regardless of spreadsheet column order. The old approach of reading
+  // headers from the sheet and zipping with e.values breaks when a new question
+  // is inserted mid-form (column order in sheet ≠ question order in e.values).
+  const namedValues  = e.namedValues;
+  const orderedTitles = Object.keys(namedValues);
 
-  console.log(JSON.stringify(submission.namedValues, null, 2));
+  console.log(JSON.stringify(namedValues, null, 2));
 
-  // Both operations run independently — a Discord failure won't block the sync.
   try {
-    sendSubmissionToDiscord(submission.namedValues, submission.orderedTitles);
+    sendSubmissionToDiscord(namedValues, orderedTitles);
   } catch (discordError) {
     Logger.log("Discord notification failed: " + discordError.message);
   }
 
-  syncSubmissionToTargetSheet(submission.namedValues);
+  syncSubmissionToTargetSheet(namedValues);
+
+  try {
+    syncSubmissionToTargetSheet(namedValues, STAGING_SPREADSHEET_ID);
+  } catch (stagingErr) {
+    Logger.log("Staging write failed (non-blocking): " + stagingErr.message);
+  }
 }
 
 
@@ -117,12 +128,12 @@ function sendFormToDiscord(e) {
  * Safe to call on trigger retry — duplicate timestamps are skipped.
  * Uses a script lock so simultaneous submissions don't race.
  */
-function syncSubmissionToTargetSheet(namedValues) {
+function syncSubmissionToTargetSheet(namedValues, ssId) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
 
   try {
-    const sheet = getOrCreateTargetSheet();
+    const sheet = getOrCreateTargetSheet(ssId);
     const existingTimestamps = getExistingTimestamps(sheet);
     const submittedAt = getResponse(namedValues, "Timestamp");
 
@@ -542,6 +553,73 @@ function fixDuplicateHeaders() {
 }
 
 /**
+ * One-time: creates a full copy of the PROD WEB spreadsheet as a staging sheet.
+ * Run once from the Apps Script editor. Logs the new staging sheet URL + ID.
+ * Paste the ID into constants.js SPREADSHEET_ID for local dev.
+ */
+function createStagingSheet() {
+  const prod  = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const copy  = prod.copy('KidsBuddy Dashboard STAGING');
+  Logger.log('✅ Staging sheet created!');
+  Logger.log('URL : ' + copy.getUrl());
+  Logger.log('ID  : ' + copy.getId());
+  Logger.log('Paste the ID above into constants.js SPREADSHEET_ID for local dev.');
+}
+
+/**
+ * One-time: backfills "Poster" into the Source column for every existing row
+ * across all Tutors tabs that currently has a blank Source value.
+ * Run this on the staging sheet after createStagingSheet() to seed test data,
+ * or on prod if addSourceColumn() was already run but some rows were missed.
+ */
+function backfillSourcePoster() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const TUTOR_TABS = [
+    'Tutors (Applied)', 'Tutors (In-Loop)',
+    'Tutors (Onboarded)', 'Tutors (Bin)'
+  ];
+
+  TUTOR_TABS.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) { Logger.log(`Sheet "${tabName}" not found — skipping.`); return; }
+
+    const lastCol = sheet.getLastColumn();
+    if (lastCol === 0) return;
+
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+    const srcColIdx = headers.indexOf('Source');
+    if (srcColIdx === -1) {
+      Logger.log(`"Source" column not found in "${tabName}" — run addSourceColumn() first.`);
+      return;
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) { Logger.log(`No data rows in "${tabName}".`); return; }
+
+    const srcCol   = srcColIdx + 1; // 1-based
+    const dataRange = sheet.getRange(2, srcCol, lastRow - 1, 1);
+    const values   = dataRange.getValues();
+
+    let filled = 0;
+    values.forEach((row, i) => {
+      if (!row[0] || String(row[0]).trim() === '') {
+        values[i][0] = 'Poster';
+        filled++;
+      }
+    });
+
+    if (filled > 0) {
+      dataRange.setValues(values);
+      Logger.log(`"${tabName}": backfilled ${filled} rows with "Poster".`);
+    } else {
+      Logger.log(`"${tabName}": all rows already have a Source value — nothing to do.`);
+    }
+  });
+
+  Logger.log('backfillSourcePoster complete.');
+}
+
+/**
  * One-time: adds "Source" column to all Tutors tabs and backfills "Poster" for
  * every existing row that has no Source value yet.
  * Safe to re-run — skips any sheet that already has the column.
@@ -684,8 +762,8 @@ function migrateParentsToSheet() {
 
 // ─── TARGET SHEET HELPERS ───────────────────────────────────────────────────
 
-function getOrCreateTargetSheet() {
-  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+function getOrCreateTargetSheet(ssId) {
+  const ss = SpreadsheetApp.openById(ssId || TARGET_SPREADSHEET_ID);
   const sheet = ss.getSheetByName(TARGET_SHEET_NAME);
 
   if (!sheet) {

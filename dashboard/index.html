@@ -125,13 +125,37 @@
       z-index: 9;
     }
 
+    /* Section row — tabs + add button side-by-side */
+    .section-tab-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .btn-add-entry {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 13px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      background: none;
+      border: 1.5px solid var(--primary);
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .btn-add-entry:hover { background: rgba(79,142,247,0.08); }
+
     /* Section switcher — segmented control */
     .section-tabs {
       display: inline-flex;
       border: 1.5px solid var(--border);
       border-radius: 10px;
       padding: 3px;
-      margin-bottom: 10px;
       background: var(--bg);
     }
     .section-tab {
@@ -495,13 +519,13 @@
 
     /* Pill toggle (Contacted) — desktop shows only the active segment */
     .pill-toggle {
-      display: inline-flex; border-radius: 20px; overflow: hidden;
-      border: none; cursor: pointer; padding: 0; background: none;
+      display: inline-flex; border-radius: 999px;
+      border: none; cursor: pointer; padding: 3px; background: #e8eaed;
     }
     .pill-toggle .pt-yes,
-    .pill-toggle .pt-no  { display: none; padding: 3px 10px; font-size: 11px; font-weight: 700; }
-    .pill-toggle.yes .pt-yes { display: inline-flex; align-items: center; background: rgba(79,142,247,0.12); color: var(--primary); border-radius: 20px; }
-    .pill-toggle.no  .pt-no  { display: inline-flex; align-items: center; background: var(--bg); color: var(--muted); border-radius: 20px; }
+    .pill-toggle .pt-no  { display: none; padding: 4px 11px; font-size: 11px; font-weight: 700; border-radius: 999px; }
+    .pill-toggle.yes .pt-yes { display: inline-flex; align-items: center; background: var(--primary); color: #fff; }
+    .pill-toggle.no  .pt-no  { display: inline-flex; align-items: center; background: var(--primary); color: #fff; }
 
     /* Contact icons (WA + mail) in phone cell */
     .td-phone    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -512,6 +536,8 @@
     .icon-call:hover { background: var(--border); color: var(--text); }
     .icon-wa:hover   { background: rgba(37,211,102,0.20); }
     .icon-mail:hover { background: var(--border); color: var(--text); }
+    .icon-copy { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--bg); color: var(--muted); border: none; cursor: pointer; }
+    .icon-copy:hover { background: var(--border); color: var(--text); }
 
     /* Mobile-extra details hidden on desktop */
     .mobile-extra { display: none; }
@@ -656,21 +682,25 @@
 
     /* Pill toggle — show both segments on mobile */
     .pill-toggle {
-      border: 1.5px solid var(--border);
-      border-radius: 20px;
-      overflow: hidden;
+      background: #e8eaed;
+      border: none;
+      border-radius: 999px;
+      padding: 3px;
       display: inline-flex;
     }
     .pill-toggle .pt-yes,
-    .pill-toggle .pt-no  { display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-    /* YES active */
-    .pill-toggle.yes { border-color: var(--primary); }
-    .pill-toggle.yes .pt-yes { background: rgba(79,142,247,0.12); color: var(--primary); border-radius: 20px 0 0 20px; }
-    .pill-toggle.yes .pt-no  { background: var(--surface); color: #9ca3af; }
-    /* NO active */
-    .pill-toggle.no  { border-color: var(--border); }
-    .pill-toggle.no  .pt-no  { background: var(--bg); color: var(--muted); border-radius: 0 20px 20px 0; }
-    .pill-toggle.no  .pt-yes { background: var(--surface); color: #9ca3af; }
+    .pill-toggle .pt-no  {
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: 1; padding: 7px 16px; font-size: 13px; font-weight: 600;
+      white-space: nowrap; border-radius: 999px;
+      transition: background 0.15s, color 0.15s;
+    }
+    /* YES active — Contacted */
+    .pill-toggle.yes .pt-yes { background: var(--primary); color: #fff; }
+    .pill-toggle.yes .pt-no  { background: transparent; color: var(--muted); }
+    /* NO active — Not yet */
+    .pill-toggle.no  .pt-no  { background: var(--primary); color: #fff; }
+    .pill-toggle.no  .pt-yes { background: transparent; color: var(--muted); }
 
     /* ── Card sections (Contact / Basic info / Notes / Schedule) ── */
     .card-section {
@@ -1036,10 +1066,21 @@
       padding: 20px 16px 32px; box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
       z-index: 101;
     }
-    .move-sheet-title {
-      font-size: 17px; font-weight: 700; color: var(--text);
+    .move-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 16px;
     }
+    .move-sheet-title {
+      font-size: 17px; font-weight: 700; color: var(--text);
+    }
+    .move-modal-close {
+      display: flex !important; align-items: center; justify-content: center;
+      width: 30px !important; height: 30px; border-radius: 50%; flex-shrink: 0;
+      border: none; background: var(--surface); cursor: pointer;
+      color: var(--muted); transition: background 0.15s, color 0.15s;
+      padding: 0; margin: 0;
+    }
+    .move-modal-close:hover { background: var(--border); color: var(--text); }
     .btn-move-opt {
       display: block; width: 100%; padding: 14px 16px; margin-bottom: 8px;
       border: 1.5px solid var(--border); border-radius: 10px;
@@ -1231,7 +1272,7 @@
 
     /* Edit button on card */
     .btn-card-edit {
-      display: flex; align-items: center; gap: 4px;
+      display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
       background: none; border: none; cursor: pointer;
       color: var(--muted); font-size: 12px; padding: 4px 6px;
       border-radius: 6px; transition: color 0.15s, background 0.15s;
@@ -1247,16 +1288,12 @@
     .btn-move-draft:hover { border-color: var(--accent, #5b8dee); color: var(--accent, #5b8dee); }
 
     /* Add Parent button */
-    #btn-add-parent {
-      font-size: 13px; font-weight: 600; padding: 7px 14px;
-      background: var(--primary); color: #fff;
-      border: none; border-radius: 10px; cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    #btn-add-parent:hover { opacity: 0.88; }
-
     /* Edit modal hint */
     .modal-hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+    .ec-check-group { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 4px; }
+    .ec-check-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+    .ec-check-label input { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+    .ec-other-input { margin-top: 6px; }
 
     /* Tall modal layout (Add Parent, Edit card) */
     .modal-tall {
@@ -1336,9 +1373,13 @@
   </div>
 
   <div class="tab-bar">
-    <div class="section-tabs">
-      <button class="section-tab active" data-section="tutors" onclick="switchSection('tutors')">Tutors</button>
-      <button class="section-tab" data-section="parents" onclick="switchSection('parents')">Parents</button>
+    <div class="section-tab-row">
+      <div class="section-tabs">
+        <button class="section-tab active" data-section="tutors" onclick="switchSection('tutors')">Tutors</button>
+        <button class="section-tab" data-section="parents" onclick="switchSection('parents')">Parents</button>
+      </div>
+      <button class="btn-add-entry" id="btn-add-tutor" onclick="openAddTutorModal()">+ Add a Tutor</button>
+      <button class="btn-add-entry" id="btn-add-student" style="display:none" onclick="">+ Add a Student</button>
     </div>
     <div class="sub-tabs" id="sub-tabs"></div>
   </div>
@@ -1347,10 +1388,6 @@
     <div class="error-banner" id="error-banner"></div>
 
     <div class="stats">
-      <div class="stat-card">
-        <div class="stat-label">Total</div>
-        <div class="stat-value" id="stat-total">—</div>
-      </div>
       <div class="stat-card">
         <div class="stat-label">Contacted</div>
         <div class="stat-value" id="stat-contacted">—</div>
@@ -1368,7 +1405,6 @@
       <div class="controls-row2">
         <button id="btn-filter-toggle" class="btn btn-filter btn-ghost" onclick="toggleFilterPanel()">⚙ Filters</button>
         <button class="btn btn-ghost" onclick="loadApplications()">↻ Refresh</button>
-        <button id="btn-add-parent" class="btn btn-primary" onclick="openAddParentModal()" style="display:none">+ Add Parent</button>
       </div>
     </div>
 
@@ -1450,7 +1486,7 @@
       </button>
     </div>
 
-    <button class="wa-next-btn" onclick="closeWAShareModal()">Next ›</button>
+    <button class="wa-next-btn" onclick="closeWAShareModal()">Done</button>
   </div>
 </div>
 
@@ -1470,17 +1506,30 @@
 <div id="bulk-bar" class="bulk-bar" style="display:none">
   <span id="bulk-count" class="bulk-count">0 selected</span>
   <div class="bulk-actions">
-    <button class="btn-bulk-action" onclick="openBulkMoveModal()">Move to…</button>
-    <button class="btn-bulk-action btn-bulk-danger" onclick="bulkDelete()">Delete</button>
+    <button class="btn-bulk-action" onclick="openBulkMoveModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>Actions</button>
+    <button class="btn-bulk-action btn-bulk-danger" onclick="bulkDelete()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Delete</button>
   </div>
   <button class="btn-bulk-cancel" onclick="clearSelection()">Cancel</button>
 </div>
 
 <div id="move-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeMoveModal()">
   <div class="modal-card" onclick="event.stopPropagation()">
-    <div class="move-sheet-title" id="move-sheet-title">Move to…</div>
+    <div class="move-modal-header">
+      <div class="move-sheet-title" id="move-sheet-title">Actions</div>
+      <button class="btn-move-cancel move-modal-close" onclick="closeMoveModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
     <div id="move-options"></div>
-    <button class="btn-move-cancel" onclick="closeMoveModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Add to In-Loop Modal -->
+<div id="inloop-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeInLoopModal()">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="move-sheet-title">Add <span id="inloop-modal-name"></span> to In-Loop?</div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn-modal-cancel" onclick="closeInLoopModal()">No</button>
+      <button class="btn-schedule-save" onclick="confirmInLoop()">Yes</button>
+    </div>
   </div>
 </div>
 

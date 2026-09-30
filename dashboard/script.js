@@ -18,7 +18,7 @@ let _searchDebounce = null;
 let _parentCache      = [];   // cached parent rows for WA search
 let _waParentMatches  = [];   // last WA search results (for selection by index)
 let _waShareData      = {};   // { tutorName, tutorPhone, tutorRow, dateStr, parentName, parentPhone, studentName }
-let _scheduleParent   = null; // { name, phone, studentName } selected in schedule modal
+let _scheduleParent   = null; // { name, phone, studentName, address } selected in schedule modal
 let _scheduleParentMatches = []; // last schedule modal parent search results
 let _pendingCalData   = null; // set after scheduling; consumed by calendar prompt after WA modal closes
 
@@ -47,6 +47,7 @@ const SOURCE_OPTIONS = [
   { value: 'Instagram',    icon: '📸' },
   { value: 'Poster',       icon: '🗞️' },
   { value: 'Referral',     icon: '👥' },
+  { value: 'Website',      icon: '🌐' },
   { value: 'WhatsApp',     icon: '💬' },
 ];
 
@@ -75,18 +76,21 @@ function renderTabUI() {
   });
   // Sub-tabs — rebuild
   const tabs = SECTION_TABS[currentSection];
-  document.getElementById('sub-tabs').innerHTML = tabs.map(t =>
-    `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}${t.isDraft ? ' draft-tab' : ''}"
-      onclick="switchTab('${t.key}')">${t.label}</button>`
-  ).join('');
+  document.getElementById('sub-tabs').innerHTML = tabs.map(t => {
+    const cnt = _tabCounts[t.key];
+    const label = cnt !== undefined ? `${t.label} (${cnt})` : t.label;
+    return `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}${t.isDraft ? ' draft-tab' : ''}"
+      data-tab-key="${t.key}" onclick="switchTab('${t.key}')">${label}</button>`;
+  }).join('');
   // Search placeholder
   const ph = currentSection === 'parents'
     ? 'Search name, phone, location…'
     : 'Search name, phone, email, college…';
   document.getElementById('search').placeholder = ph;
-  // Show "Add Parent" button only in parents tab
-  const addBtn = document.getElementById('btn-add-parent');
-  if (addBtn) addBtn.style.display = currentSection === 'parents' ? '' : 'none';
+  const addTutorBtn   = document.getElementById('btn-add-tutor');
+  const addStudentBtn = document.getElementById('btn-add-student');
+  if (addTutorBtn)   addTutorBtn.style.display   = currentSection === 'tutors'   ? '' : 'none';
+  if (addStudentBtn) addStudentBtn.style.display  = currentSection === 'parents'  ? '' : 'none';
 }
 
 // ── SESSION STORAGE ───────────────────────────────────────────────────────────
@@ -114,6 +118,44 @@ function clearSession() {
 }
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
+// ── GOOGLE MAPS PLACES ───────────────────────────────────────────────────────
+let _mapsAPILoaded    = false;
+let _mapsAutocomplete = null;
+
+function _loadMapsAPI() {
+  if (!MAPS_API_KEY || _mapsAPILoaded || document.getElementById('maps-api-script')) return;
+  window._onMapsReady = () => { _mapsAPILoaded = true; };
+  const s = document.createElement('script');
+  s.id    = 'maps-api-script';
+  s.src   = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}&libraries=places&callback=_onMapsReady`;
+  s.async = s.defer = true;
+  document.head.appendChild(s);
+}
+
+function _initAddressAutocomplete(inputId) {
+  if (!_mapsAPILoaded || !window.google?.maps?.places) return;
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  _mapsAutocomplete = new google.maps.places.Autocomplete(input, {
+    componentRestrictions: { country: 'in' },
+    fields: ['formatted_address', 'name', 'address_components'],
+  });
+  _mapsAutocomplete.addListener('place_changed', () => {
+    const place = _mapsAutocomplete.getPlace();
+    if (!place) return;
+    // Full formatted address → address textarea
+    if (place.formatted_address) {
+      const addrEl = document.getElementById('ap-address');
+      if (addrEl) addrEl.value = place.formatted_address;
+    }
+    // Locality / sublocality → location field (short area name)
+    const locality = place.address_components?.find(c =>
+      c.types.some(t => ['sublocality_level_1', 'sublocality', 'locality'].includes(t))
+    );
+    if (locality) input.value = locality.long_name;
+  });
+}
+
 window.onload = () => {
   // window.__kbSession was set synchronously by the inline script in index.html
   // before first paint, so the correct screen is already visible by now.
@@ -127,6 +169,8 @@ window.onload = () => {
     renderTabUI();
     loadApplications();
   }
+
+  _loadMapsAPI();
 
   // Init token client regardless (needed for sign-in button and sign-out)
   const ready = setInterval(() => {
@@ -286,22 +330,60 @@ async function loadApplications() {
 
   const colEnd = 'AE';
   try {
-    const range  = encodeURIComponent(`${config.sheet}!A2:${colEnd}`);
+    // Draft sheets may lack a header row (prod Draft is often empty, so staging never gets one).
+    // Fetch from A1 and detect/skip the header to find data wherever it actually lives.
+    const fetchFrom = config.isDraft ? 'A1' : 'A2';
+    const range  = encodeURIComponent(`${config.sheet}!${fetchFrom}:${colEnd}`);
     const url    = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
     const result = await apiFetch(url);
 
-    allRows = (result.values || []).filter(r => r.length > 0);
-    allRows.forEach((row, i) => { row._sheetRow = i + 2; });
+    let rows = result.values || [];
+    let sheetRowOffset = 2;
+    if (config.isDraft) {
+      if (rows.length > 0 && rows[0][0] === 'App ID') {
+        rows = rows.slice(1); // header present — skip it, data starts at sheet row 2
+        sheetRowOffset = 2;
+      } else {
+        sheetRowOffset = 1; // no header — data starts at sheet row 1
+      }
+    }
+
+    allRows = rows.filter(r => r.length > 0);
+    allRows.forEach((row, i) => { row._sheetRow = sheetRowOffset + i; });
     if (config.statusFilter) {
       allRows = allRows.filter(r => (r[currentSection === 'tutors' ? C.STATUS : CP.STATUS] || '') === config.statusFilter);
     }
     allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
     populateFilterOptions();
     applyFilters();
+    // After loading All tab, prefetch Bin and Draft counts in background
+    if (!config.statusFilter && !config.isBin && !config.isDraft) {
+      _prefetchSideCounts();
+    }
   } catch (err) {
     showError('Failed to load data: ' + err.message);
     setTableMsg('Could not load.');
   }
+}
+
+async function _prefetchSideCounts() {
+  const tabs = SECTION_TABS[currentSection];
+  const binTab   = tabs.find(t => t.isBin);
+  const draftTab = tabs.find(t => t.isDraft);
+  const fetches = [];
+  if (binTab   && _tabCounts['bin']   === undefined) fetches.push(_fetchSheetRowCount(binTab.sheet,   'bin'));
+  if (draftTab && _tabCounts['draft'] === undefined) fetches.push(_fetchSheetRowCount(draftTab.sheet, 'draft'));
+  if (fetches.length) await Promise.all(fetches);
+}
+
+async function _fetchSheetRowCount(sheetName, tabKey) {
+  try {
+    const range  = encodeURIComponent(`${sheetName}!A:A`);
+    const result = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`);
+    const rows   = (result.values || []).slice(1); // skip header row
+    _tabCounts[tabKey] = rows.filter(r => r.length > 0 && r[0]).length;
+    updateTabCountLabels();
+  } catch (_) { /* best-effort */ }
 }
 
 async function _loadMoreParents(config, dateCol) {
@@ -418,13 +500,42 @@ function _doFilter() {
 }
 
 // ── STATS ─────────────────────────────────────────────────────────────────────
+let _tabCounts = {};
+
 function updateStats() {
   const contactedCol = currentSection === 'parents' ? CP.CONTACTED : C.CONTACTED;
   const total     = allRows.length;
   const contacted = allRows.filter(r => cell(r, contactedCol) === 'Yes').length;
-  document.getElementById('stat-total').textContent     = total;
   document.getElementById('stat-contacted').textContent = contacted;
   document.getElementById('stat-pending').textContent   = total - contacted;
+
+  // Update tab count badges
+  const cfg = currentTabConfig();
+  if (!cfg.statusFilter && !cfg.isBin && !cfg.isDraft) {
+    // On "All" tab — compute counts for all status-filter tabs from allRows
+    const statusCol = currentSection === 'parents' ? CP.STATUS : C.STATUS;
+    _tabCounts = {};
+    SECTION_TABS[currentSection].forEach(t => {
+      if (t.statusFilter) {
+        _tabCounts[t.key] = allRows.filter(r => (r[statusCol] || '') === t.statusFilter).length;
+      } else if (!t.isBin && !t.isDraft) {
+        _tabCounts[t.key] = allRows.length;
+      }
+    });
+  } else {
+    _tabCounts[cfg.key] = allRows.length;
+  }
+  updateTabCountLabels();
+}
+
+function updateTabCountLabels() {
+  document.querySelectorAll('.sub-tab').forEach(btn => {
+    const key = btn.getAttribute('data-tab-key');
+    if (key && _tabCounts[key] !== undefined) {
+      const tab = SECTION_TABS[currentSection].find(t => t.key === key);
+      btn.textContent = `${tab.label} (${_tabCounts[key]})`;
+    }
+  });
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
@@ -438,13 +549,15 @@ const NOTE_SVG  = `<svg aria-hidden="true" width="12" height="12" viewBox="0 0 2
 const WA_SVG   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
 const MAIL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>`;
 const CALL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>`;
+const COPY_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 const GCAL_SVG    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>`;
 const CHEVRON_SVG = `<svg class="expand-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 const USER_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
 const INFO_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
 const CLASSES_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
 const STUDENT_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-const MOVE_SVG     = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+const MOVE_SVG       = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+const HAMBURGER_SVG  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`;
 const SUBJECTS_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
 const PIN_SVG      = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 const RUPEE_SVG    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`;
@@ -511,19 +624,22 @@ function appendRows() {
     const tr = document.createElement('tr');
     tr.className = 'data-row';
     tr.dataset.uid = uid;
+    tr.dataset.sheetRow = sheetRow;
     tr.innerHTML = `
       <td class="td-id">${esc(cell(row, C.APP_ID))}</td>
       <td class="td-name">
         <span class="card-applied-at">${esc(submittedFmt)}</span>
         ${statusBadgeHTML}
         ${esc(name)}
+        ${sourceChipHTML(cell(row, C.SOURCE), sheetRow)}
       </td>
       <td class="td-phone td-phone-desktop">
         <span class="phone-num">${esc(phone)}</span>
         <span class="contact-icons">
           ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow});handleCallTap(${sheetRow},'${uid}')" title="Call">${CALL_SVG}</a>` : ''}
-          ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
-          ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+          ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation();handleCommunicationTap(${sheetRow},'${uid}')" title="WhatsApp">${WA_SVG}</a>` : ''}
+          ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation();handleCommunicationTap(${sheetRow},'${uid}')" title="Email">${MAIL_SVG}</a>` : ''}
+          ${digits ? `<button class="icon-copy" onclick="event.stopPropagation();copyPhone('${digits}')" title="Copy number">${COPY_SVG}</button>` : ''}
         </span>
       </td>
       <td class="td-classes">
@@ -531,7 +647,6 @@ function appendRows() {
           ${cell(row, C.TIMINGS)  ? `<span class="info-flat-row">${CLOCK_SVG}${esc(cell(row, C.TIMINGS))}</span>`   : ''}
           ${cell(row, C.PAY)      ? `<span class="info-flat-row">${RUPEE_SVG}${esc(cell(row, C.PAY))}</span>`       : ''}
           ${cell(row, C.LOCATION) ? `<span class="info-flat-row">${PIN_SVG}${esc(cell(row, C.LOCATION))}</span>`    : ''}
-          ${sourceChipHTML(cell(row, C.SOURCE), sheetRow)}
         </div>
         <div class="card-section">
           <div class="card-section-header"><span class="cs-label">${USER_SVG} Contact</span></div>
@@ -540,8 +655,9 @@ function appendRows() {
               <span class="phone-num">${esc(phone)}</span>
               <span class="contact-icons">
                 ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow});handleCallTap(${sheetRow},'${uid}')" title="Call">${CALL_SVG}</a>` : ''}
-                ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
-                ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+                ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation();handleCommunicationTap(${sheetRow},'${uid}')" title="WhatsApp">${WA_SVG}</a>` : ''}
+                ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation();handleCommunicationTap(${sheetRow},'${uid}')" title="Email">${MAIL_SVG}</a>` : ''}
+                ${digits ? `<button class="icon-copy" onclick="event.stopPropagation();copyPhone('${digits}')" title="Copy number">${COPY_SVG}</button>` : ''}
               </span>
             </div>
             <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
@@ -566,7 +682,7 @@ function appendRows() {
         <div class="card-top-actions">
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
           <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
-          <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
+          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
@@ -677,6 +793,7 @@ function appendParentRows() {
           ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
           ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
           ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+          ${digits ? `<button class="icon-copy" onclick="event.stopPropagation();copyPhone('${digits}')" title="Copy number">${COPY_SVG}</button>` : ''}
         </span>
       </td>
       <td class="td-classes">
@@ -694,6 +811,7 @@ function appendParentRows() {
                 ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
                 ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
                 ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+                ${digits ? `<button class="icon-copy" onclick="event.stopPropagation();copyPhone('${digits}')" title="Copy number">${COPY_SVG}</button>` : ''}
               </span>
             </div>
             <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
@@ -715,7 +833,7 @@ function appendParentRows() {
         <div class="card-top-actions">
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
           <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
-          <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
+          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
@@ -891,39 +1009,6 @@ async function handleToggle(btn) {
       } else {
         if (colNum === C.CONTACTED + 1) {
           allRows[ri][C.CONTACTED] = next;
-          const badge = btn.closest('tr.data-row')?.querySelector('.status-badge');
-          if (next === 'Yes' && !allRows[ri][C.STATUS]) {
-            allRows[ri][C.STATUS] = 'In-Loop';
-            if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
-            updateCell(sheetRow, C.STATUS + 1, 'In-Loop').catch(err => {
-              allRows[ri][C.STATUS] = '';
-              if (badge) { badge.textContent = ''; badge.className = 'status-badge badge-hidden'; }
-              showToast('Failed to update status: ' + err.message, 'error');
-            });
-          } else if (next === 'No' && allRows[ri][C.STATUS] === 'In-Loop') {
-            const rowEl = btn.closest('tr.data-row');
-            const uid2  = rowEl?.dataset.uid;
-            const tName = allRows[ri][C.NAME] || '';
-            allRows[ri][C.STATUS] = '';
-            if (badge) { badge.textContent = ''; badge.className = 'status-badge badge-hidden'; }
-            updateCell(sheetRow, C.STATUS + 1, '').then(() => {
-              const cfg2 = currentTabConfig();
-              if (cfg2.statusFilter === 'In-Loop' && uid2) {
-                const ri2 = allRows.findIndex(r => r._sheetRow === sheetRow);
-                if (ri2 !== -1) allRows.splice(ri2, 1);
-                rowEl?.remove();
-                document.querySelector(`tr.detail-row[data-uid="${uid2}"]`)?.remove();
-                updateStats();
-                const lbl = currentSection === 'parents' ? 'contacts' : 'applications';
-                document.getElementById('result-count').textContent = `${allRows.length} ${lbl}`;
-              }
-              showToast(`${tName} taken out of In-Loop`);
-            }).catch(err => {
-              allRows[ri][C.STATUS] = 'In-Loop';
-              if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
-              showToast('Failed to update status: ' + err.message, 'error');
-            });
-          }
         }
         if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT] = next;
       }
@@ -1157,8 +1242,8 @@ function openScheduleModal(sheetRow, current) {
   if (ri !== -1) {
     const raw = (allRows[ri][C.SCHEDULED_PARENT] || '').trim();
     if (raw) {
-      const [pName, pPhone, pStudent] = raw.split('|');
-      _scheduleParent = { name: pName || '', phone: pPhone || '', studentName: pStudent || '' };
+      const [pName, pPhone, pStudent, pAddress] = raw.split('|');
+      _scheduleParent = { name: pName || '', phone: pPhone || '', studentName: pStudent || '', address: pAddress || '' };
     }
   }
   _renderModalParent();
@@ -1213,7 +1298,7 @@ function searchModalParent(q) {
 function selectModalParent(idx) {
   const r = _scheduleParentMatches[idx];
   if (!r) return;
-  _scheduleParent = { name: cell(r, CP.NAME), phone: cell(r, CP.PHONE), studentName: cell(r, CP.STUDENT_NAME) };
+  _scheduleParent = { name: cell(r, CP.NAME), phone: cell(r, CP.PHONE), studentName: cell(r, CP.STUDENT_NAME), address: cell(r, CP.ADDRESS) || cell(r, CP.LOCATION) || '' };
   document.getElementById('schedule-parent-input').value = '';
   document.getElementById('schedule-parent-dropdown').style.display = 'none';
   _renderModalParent();
@@ -1284,12 +1369,12 @@ async function ensureParentCache() {
   } catch { _parentCache = []; }
 }
 
-function openWAShareModal(tutorName, tutorPhone, dateStr, parentName = '', parentPhone = '', studentName = '') {
-  _waShareData = { tutorName, tutorPhone, dateStr, parentName, parentPhone, studentName };
+function openWAShareModal(tutorName, tutorPhone, dateStr, parentName = '', parentPhone = '', studentName = '', parentAddress = '') {
+  _waShareData = { tutorName, tutorPhone, dateStr, parentName, parentPhone, studentName, parentAddress };
   _waParentMatches = [];
 
   document.getElementById('wa-date-chip').textContent = '📅 ' + formatDate(dateStr);
-  document.getElementById('wa-tutor-name').textContent = tutorName + (tutorPhone ? ' · ' + tutorPhone : '');
+  document.getElementById('wa-tutor-name').textContent = tutorName;
 
   const visitWith = document.getElementById('wa-visit-with');
   if (parentName) {
@@ -1302,7 +1387,7 @@ function openWAShareModal(tutorName, tutorPhone, dateStr, parentName = '', paren
   const parentNameEl = document.getElementById('wa-parent-name');
   const searchWrap   = document.getElementById('wa-parent-search-wrap');
   if (parentName) {
-    parentNameEl.textContent = parentName + (studentName ? ' · ' + studentName : '') + (parentPhone ? ' · ' + parentPhone : '');
+    parentNameEl.textContent = parentName + (studentName ? ' · ' + studentName : '');
     parentNameEl.style.display = 'block';
     searchWrap.style.display = 'none';
     document.getElementById('btn-send-parent').disabled = false;
@@ -1336,8 +1421,8 @@ function openWAShareFromCard(sheetRow) {
     return;
   }
 
-  const [pName, pPhone, pStudent] = raw.split('|');
-  openWAShareModal(name, phone, dateStr, pName || '', pPhone || '', pStudent || '');
+  const [pName, pPhone, pStudent, pAddress] = raw.split('|');
+  openWAShareModal(name, phone, dateStr, pName || '', pPhone || '', pStudent || '', pAddress || '');
 }
 
 function closeWAShareModal() {
@@ -1361,14 +1446,15 @@ function openCalendarPromptModal(d) {
 
   // Default editable event name
   const _defTitle = d.studentName
-    ? `Invitation: KidsBuddy Tutor <> ${d.studentName} | ${d.parentPhone || ''}`.trimEnd()
+    ? `Invitation: KidsBuddy Tutor <> ${d.studentName}`
     : 'Invitation: KidsBuddy Tutor <> Student Visit';
   document.getElementById('cp-event-name').value = _defTitle;
 
   // Default editable description
   const lines = [`KidsBuddy Visit — ${d.tutorName}`];
-  if (d.parentName)  lines.push(`Parent: ${d.parentName}${d.parentPhone ? ' · ' + d.parentPhone : ''}`);
-  if (d.studentName) lines.push(`Student: ${d.studentName}`);
+  if (d.parentName)    lines.push(`Parent: ${d.parentName}`);
+  if (d.studentName)   lines.push(`Student: ${d.studentName}`);
+  if (d.parentAddress) lines.push(`Address: ${d.parentAddress}`);
   document.getElementById('cp-event-desc').value = lines.join('\n');
 
   const btn = document.getElementById('btn-cp-yes');
@@ -1390,15 +1476,16 @@ function openCalendarPromptFromCard(sheetRow) {
   const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
   if (ri === -1) return;
   const pRaw = (allRows[ri][C.SCHEDULED_PARENT] || '').trim();
-  const [pName, pPhone, pStudent] = pRaw ? pRaw.split('|') : [];
+  const [pName, pPhone, pStudent, pAddress] = pRaw ? pRaw.split('|') : [];
   openCalendarPromptModal({
     sheetRow,
-    tutorName:   cell(allRows[ri], C.NAME),
-    tutorEmail:  cell(allRows[ri], C.EMAIL),
-    dateStr:     cell(allRows[ri], C.INTERVIEW_AT),
-    parentName:  pName   || '',
-    parentPhone: pPhone  || '',
-    studentName: pStudent || '',
+    tutorName:     cell(allRows[ri], C.NAME),
+    tutorEmail:    cell(allRows[ri], C.EMAIL),
+    dateStr:       cell(allRows[ri], C.INTERVIEW_AT),
+    parentName:    pName    || '',
+    parentPhone:   pPhone   || '',
+    studentName:   pStudent || '',
+    parentAddress: pAddress || '',
   });
 }
 
@@ -1460,9 +1547,8 @@ function _buildCalendarBody(tutorName, tutorEmail, storedDateStr, description = 
   const end  = new Date(d.getTime() + 60 * 60 * 1000);
   const iso  = dt => `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:00`;
   const _sName = description.match(/Student:\s*(.+)/)?.[1]?.trim();
-  const _sPhone = description.match(/Parent:.*?·\s*([^\n]+)/)?.[1]?.trim();
   const _defaultTitle = _sName
-    ? `Invitation: KidsBuddy Tutor <> ${_sName} | ${_sPhone || ''}`.trimEnd()
+    ? `Invitation: KidsBuddy Tutor <> ${_sName}`
     : 'Invitation: KidsBuddy Tutor <> Student Visit';
   const body = {
     summary: eventName || _defaultTitle,
@@ -1544,12 +1630,13 @@ function searchParentsForWA(q) {
 function selectWAParent(idx) {
   const r = _waParentMatches[idx];
   if (!r) return;
-  _waShareData.parentName  = cell(r, CP.NAME);
-  _waShareData.parentPhone = cell(r, CP.PHONE);
-  _waShareData.studentName = cell(r, CP.STUDENT_NAME);
+  _waShareData.parentName    = cell(r, CP.NAME);
+  _waShareData.parentPhone   = cell(r, CP.PHONE);
+  _waShareData.studentName   = cell(r, CP.STUDENT_NAME);
+  _waShareData.parentAddress = cell(r, CP.ADDRESS) || cell(r, CP.LOCATION) || '';
 
   const parentNameEl = document.getElementById('wa-parent-name');
-  parentNameEl.textContent = _waShareData.parentName + (_waShareData.studentName ? ' · ' + _waShareData.studentName : '') + (_waShareData.parentPhone ? ' · ' + _waShareData.parentPhone : '');
+  parentNameEl.textContent = _waShareData.parentName + (_waShareData.studentName ? ' · ' + _waShareData.studentName : '');
   parentNameEl.style.display = 'block';
   document.getElementById('wa-parent-search-wrap').style.display = 'none';
 
@@ -1562,10 +1649,11 @@ function selectWAParent(idx) {
 }
 
 function buildWAMessage(role) {
-  const { tutorName, parentName, studentName, dateStr } = _waShareData;
+  const { tutorName, parentName, studentName, dateStr, parentAddress } = _waShareData;
   const date = formatDate(dateStr);
   if (role === 'tutor') {
-    return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
+    const addrLine = parentAddress ? `\n📍 Address: ${parentAddress}` : '';
+    return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}${addrLine}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
   }
   return `Hi ${parentName}! 👋\n\n*KidsBuddy* has arranged a tutor visit at your home:\n\n📅 ${date}\n👩‍🏫 Tutor: ${tutorName || '—'}\n\nPlease ensure someone is available. Thank you!\n— KidsBuddy Team`;
 }
@@ -1603,7 +1691,7 @@ async function saveInterviewSchedule() {
   try {
     const fmt = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
     const parentStr = _scheduleParent
-      ? [_scheduleParent.name, _scheduleParent.phone, _scheduleParent.studentName].join('|')
+      ? [_scheduleParent.name, _scheduleParent.phone, _scheduleParent.studentName, _scheduleParent.address || ''].join('|')
       : '';
     await updateCell(sheetRow, C.INTERVIEW_STATUS   + 1, 'Scheduled');
     await updateCell(sheetRow, C.INTERVIEW_AT        + 1, fmt);
@@ -1662,7 +1750,7 @@ async function saveInterviewSchedule() {
           const p = _scheduleParent;
           openWAShareModal(
             cell(allRows[ri3], C.NAME), cell(allRows[ri3], C.PHONE), fmt,
-            p?.name || '', p?.phone || '', p?.studentName || ''
+            p?.name || '', p?.phone || '', p?.studentName || '', p?.address || ''
           );
         }
       : null;
@@ -1762,6 +1850,10 @@ async function _rejectionMove(sheetRow, uid, targetStatus) {
   hideLoader();
 }
 
+function copyPhone(digits) {
+  navigator.clipboard.writeText(digits).then(() => showToast('Copied'));
+}
+
 async function logCall(sheetRow) {
   try {
     const now = new Date();
@@ -1798,6 +1890,7 @@ function updateBulkBar() {
   const allChecked = count > 0 && count === document.querySelectorAll('.card-check').length;
   const sa = document.getElementById('select-all-check');
   if (sa) { sa.checked = allChecked; sa.indeterminate = count > 0 && !allChecked; }
+
 }
 
 function clearSelection() {
@@ -1809,28 +1902,42 @@ function clearSelection() {
   if (sa) { sa.checked = false; sa.indeterminate = false; }
 }
 
+function openCardActions(sheetRow, uid) {
+  selectedUids.clear();
+  selectedUids.add(uid);
+  openBulkMoveModal();
+}
+
 function openBulkMoveModal() {
   if (!selectedUids.size) return;
   const cfg   = currentTabConfig();
+  if (cfg.isBin) return;
+
   const modal = document.getElementById('move-modal');
   const cancelBtn = modal.querySelector('.btn-move-cancel');
-  cancelBtn.onclick = closeMoveModal;
+  if (cancelBtn) cancelBtn.onclick = closeMoveModal;
   modal.onclick = e => { if (e.target === modal) closeMoveModal(); };
 
-  let title, optsHTML;
-  if (cfg.statusFilter) {
-    title = `Remove ${selectedUids.size} from ${cfg.label}`;
-    optsHTML = `<button class="btn-move-opt" onclick="closeMoveModal();bulkUpdateStatus('')">Remove from ${cfg.label}</button>`;
-  } else if (!cfg.isBin) {
-    title = `Add ${selectedUids.size} to…`;
-    const subTabs = SECTION_TABS[currentSection].filter(t => t.statusFilter);
-    optsHTML = subTabs.map(t =>
-      `<button class="btn-move-opt" onclick="closeMoveModal();bulkUpdateStatus('${t.statusFilter}')">${t.label}</button>`
-    ).join('');
-  } else {
-    return;
+  const statusCol    = currentSection === 'parents' ? CP.STATUS    : C.STATUS;
+  const contactedCol = currentSection === 'parents' ? CP.CONTACTED : C.CONTACTED;
+
+  const hasInLoop = [...selectedUids].some(uid => {
+    const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+    if (!el) return false;
+    const ri = allRows.findIndex(r => r._sheetRow === parseInt(el.dataset.sheetRow));
+    return ri !== -1 && (allRows[ri][statusCol] || '') === 'In-Loop';
+  });
+
+  let optsHTML =
+    `<button class="btn-move-opt" onclick="closeMoveModal();bulkUpdateStatus('In-Loop')">Add to In-Loop</button>`;
+  if (hasInLoop) {
+    optsHTML += `<button class="btn-move-opt" onclick="closeMoveModal();bulkRemoveFromInLoop()">Remove from In-Loop</button>`;
   }
-  modal.querySelector('.move-sheet-title').textContent = title;
+  optsHTML +=
+    `<button class="btn-move-opt" onclick="closeMoveModal();bulkMarkContacted('Yes')">Mark Contacted</button>` +
+    `<button class="btn-move-opt" onclick="closeMoveModal();bulkMarkContacted('No')">Mark not Contacted</button>`;
+
+  modal.querySelector('.move-sheet-title').textContent = 'Actions';
   document.getElementById('move-options').innerHTML = optsHTML;
   modal.style.display = 'flex';
 }
@@ -1838,13 +1945,58 @@ function openBulkMoveModal() {
 async function bulkUpdateStatus(status) {
   showLoader();
   const uids = [...selectedUids];
+  let count = 0;
   for (const uid of uids) {
     const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
     if (!el) continue;
-    await updateStatus(parseInt(el.dataset.sheetRow), uid, status);
+    await updateStatus(parseInt(el.dataset.sheetRow), uid, status, { suppressToast: true });
+    count++;
   }
   clearSelection();
   hideLoader();
+  if (count) showToast(`${count} ${count === 1 ? 'tutor' : 'tutors'} added to ${status}`);
+}
+
+async function bulkRemoveFromInLoop() {
+  const statusCol = currentSection === 'parents' ? CP.STATUS : C.STATUS;
+  showLoader();
+  const uids = [...selectedUids];
+  let count = 0;
+  for (const uid of uids) {
+    const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+    if (!el) continue;
+    const sr = parseInt(el.dataset.sheetRow);
+    const ri = allRows.findIndex(r => r._sheetRow === sr);
+    if (ri === -1 || (allRows[ri][statusCol] || '') !== 'In-Loop') continue;
+    await updateStatus(sr, uid, '', { suppressToast: true });
+    count++;
+  }
+  clearSelection();
+  hideLoader();
+  if (count) showToast(`${count} ${count === 1 ? 'tutor' : 'tutors'} removed from In-Loop`);
+}
+
+async function bulkMarkContacted(value) {
+  const col = currentSection === 'parents' ? CP.CONTACTED : C.CONTACTED;
+  showLoader();
+  const uids = [...selectedUids];
+  let count = 0;
+  for (const uid of uids) {
+    const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+    if (!el) continue;
+    const sr = parseInt(el.dataset.sheetRow);
+    const ri = allRows.findIndex(r => r._sheetRow === sr);
+    if (ri === -1 || (allRows[ri][col] || '') === value) continue;
+    allRows[ri][col] = value;
+    const pill = document.querySelector(`.pill-toggle[data-sheet-row="${sr}"][data-col="${col + 1}"]`);
+    if (pill) { pill.className = `pill-toggle ${value === 'Yes' ? 'yes' : 'no'}`; pill.dataset.current = value; }
+    await updateCell(sr, col + 1, value);
+    count++;
+  }
+  clearSelection();
+  updateStats();
+  hideLoader();
+  if (count) showToast(`${count} ${count === 1 ? 'tutor' : 'tutors'} marked ${value === 'Yes' ? 'Contacted' : 'Not Contacted'}`);
 }
 
 function bulkDelete() {
@@ -1947,7 +2099,7 @@ async function _doMoveToDraft(sheetRow, uid) {
   try {
     await ensureSheetIds();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_DRAFT)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_DRAFT)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [[...row]] }) }
     );
     const srcId = sheetIdMap[cfg.sheet];
@@ -1966,6 +2118,7 @@ async function _doMoveToDraft(sheetRow, uid) {
     });
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
     document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    if (typeof _tabCounts['draft'] === 'number') _tabCounts['draft']++;
     updateStats();
     const rc = document.getElementById('result-count');
     rc.textContent = `${allRows.length} applications`;
@@ -1987,7 +2140,7 @@ async function restoreFromDraft(sheetRow, uid) {
   try {
     await ensureSheetIds();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_APPLIED)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_APPLIED)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [[...row]] }) }
     );
     const draftId = sheetIdMap[SHEETS.TUTORS_DRAFT];
@@ -1999,9 +2152,11 @@ async function restoreFromDraft(sheetRow, uid) {
       }}}]})}
     );
     allRows.splice(ri, 1);
-    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
-    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    allRows.forEach(r => { if (r._sheetRow > sheetRow) r._sheetRow--; });
+    document.querySelector(`tr[data-uid="${uid}"]`)?.remove();
+    if (typeof _tabCounts['draft'] === 'number') _tabCounts['draft'] = Math.max(0, _tabCounts['draft'] - 1);
     updateStats();
+    document.getElementById('result-count').textContent = `${allRows.length} applications`;
     hideLoader();
     showToast(`${name} restored to All`);
   } catch (err) {
@@ -2060,7 +2215,10 @@ function openAddParentModal() {
   if (!m) return;
   m.querySelectorAll('input, textarea, select').forEach(el => { el.value = ''; });
   document.getElementById('ap-status').value = '';
+  _mapsAutocomplete = null; // reset so a fresh autocomplete binds each time
   m.style.display = 'flex';
+  // Defer so the input is visible when Autocomplete attaches
+  setTimeout(() => _initAddressAutocomplete('ap-location'), 50);
 }
 
 function closeAddParentModal() {
@@ -2121,7 +2279,7 @@ async function saveNewParent() {
   showLoader();
   try {
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(targetSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(targetSheet)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [row] }) }
     );
     hideLoader();
@@ -2139,6 +2297,7 @@ async function saveNewParent() {
 let _editCardSheetRow = null;
 let _editCardSection  = null;
 let _editCardRI       = null;
+let _editCardIsNew    = false;
 
 const TUTOR_EDIT_FIELDS = [
   { id: 'ec-name',      label: 'Name',              col: 'NAME',      type: 'text' },
@@ -2150,17 +2309,22 @@ const TUTOR_EDIT_FIELDS = [
     opts: ['Student', 'Working'] },
   { id: 'ec-travel',    label: 'Travel Mode',       col: 'TRAVEL',    type: 'select',
     opts: ['Bike', 'Bus', 'Own vehicle', 'Public transport', 'Walk'] },
-  { id: 'ec-classes',   label: 'Classes',           col: 'CLASSES',   type: 'text', hint: 'e.g. Classes 1-5, 6-8' },
-  { id: 'ec-subjects',  label: 'Subjects',          col: 'SUBJECTS',  type: 'text' },
-  { id: 'ec-languages', label: 'Languages',         col: 'LANGUAGES', type: 'text' },
-  { id: 'ec-extras',    label: 'Extra Activities',  col: 'EXTRAS',    type: 'text' },
-  { id: 'ec-timings',   label: 'Available Timings', col: 'TIMINGS',   type: 'text' },
+  { id: 'ec-classes',   label: 'Classes',           col: 'CLASSES',   type: 'multicheck',
+    opts: ['0-5', '6-8', '8-10', 'Other'] },
+  { id: 'ec-subjects',  label: 'Subjects',          col: 'SUBJECTS',  type: 'multicheck',
+    opts: ['Maths', 'Science (bio,chem,phy)', 'Social', 'Other'] },
+  { id: 'ec-languages', label: 'Languages',         col: 'LANGUAGES', type: 'multicheck',
+    opts: ['Hindi', 'English', 'Telugu', 'French', 'German', 'Spanish', 'Other'] },
+  { id: 'ec-extras',    label: 'Extra Activities',  col: 'EXTRAS',    type: 'multicheck',
+    opts: ['Communication skills', 'Computer languages', 'Computer basics', 'Singing vocal', 'Dance', 'Musical instruments', 'Bhagavad gita', 'Other'] },
+  { id: 'ec-timings',   label: 'Available Timings', col: 'TIMINGS',   type: 'multicheck',
+    opts: ['Between 5am to 10am', 'Between 10am to 4pm', 'Between 4pm to 9pm', 'Other'] },
   { id: 'ec-pay',       label: 'Expected Pay / hr', col: 'PAY',       type: 'text', hint: 'e.g. 500-1000' },
   { id: 'ec-workhours', label: 'College / Work Timings', col: 'WORKHOURS', type: 'text' },
   { id: 'ec-open',      label: 'Open to Contact',   col: 'OPEN',      type: 'select',
     opts: ['Yes', 'No'] },
-  { id: 'ec-source',    label: 'Source',            col: 'SOURCE',    type: 'select',
-    opts: SOURCE_OPTIONS.map(o => o.value) },
+  { id: 'ec-source',    label: 'Source',            col: 'SOURCE',    type: 'radio',
+    opts: ['Facebook', 'Instagram', 'Referral', 'Poster', 'Website', 'WhatsApp', 'Cold calling'] },
 ];
 
 const PARENT_EDIT_FIELDS = [
@@ -2178,6 +2342,57 @@ const PARENT_EDIT_FIELDS = [
   { id: 'ec-notes',    label: 'Notes',          col: 'NOTES',           type: 'textarea' },
 ];
 
+async function _generateNextTutorId() {
+  try {
+    const range  = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!A:A`);
+    const result = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`);
+    const n = (result.values || []).length; // includes header row
+    return 'KB-' + String(Math.max(n, 1)).padStart(3, '0');
+  } catch (_) {
+    return 'KB-' + Date.now();
+  }
+}
+
+function openAddTutorModal() {
+  _editCardIsNew    = true;
+  _editCardSection  = 'tutors';
+  _editCardSheetRow = null;
+  _editCardRI       = null;
+
+  document.getElementById('edit-card-title').textContent = 'Add a Tutor';
+  document.getElementById('edit-card-modal').dataset.sheetRow = '';
+  document.getElementById('edit-card-modal').dataset.uid      = '';
+
+  const body = document.getElementById('edit-card-body');
+  body.innerHTML = TUTOR_EDIT_FIELDS.map(f => {
+    if (f.type === 'select') {
+      const opts = ['', ...f.opts].map(o =>
+        `<option value="${esc(o)}">${esc(o) || '—'}</option>`
+      ).join('');
+      return `<label class="modal-label">${f.label}</label><select id="${f.id}" class="modal-input">${opts}</select>`;
+    }
+    if (f.type === 'textarea') {
+      return `<label class="modal-label">${f.label}</label><textarea id="${f.id}" class="cal-desc-area" rows="2"></textarea>`;
+    }
+    if (f.type === 'multicheck') {
+      const checkboxes = f.opts.map(o =>
+        `<label class="ec-check-label"><input type="checkbox" class="ec-checkbox" data-group="${f.id}" value="${esc(o)}"> ${esc(o)}</label>`
+      ).join('');
+      const otherInput = `<input type="text" id="${f.id}-other" class="modal-input ec-other-input" placeholder="Other (specify)" autocomplete="off">`;
+      return `<label class="modal-label">${f.label}</label><div class="ec-check-group" id="${f.id}">${checkboxes}</div>${otherInput}`;
+    }
+    if (f.type === 'radio') {
+      const radios = f.opts.map(o =>
+        `<label class="ec-check-label"><input type="radio" name="${f.id}" value="${esc(o)}"${o === 'Poster' ? ' checked' : ''}> ${esc(o)}</label>`
+      ).join('');
+      return `<label class="modal-label">${f.label}</label><div class="ec-check-group" id="${f.id}">${radios}</div>`;
+    }
+    return `<label class="modal-label">${f.label}${f.hint ? `<span class="modal-hint"> — ${f.hint}</span>` : ''}</label><input id="${f.id}" class="modal-input" type="${f.type}" value="" autocomplete="off">`;
+  }).join('');
+
+  document.getElementById('edit-card-modal').style.display = 'flex';
+}
+
 function openEditCardModal(sheetRow, uid) {
   const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
   if (ri === -1) return;
@@ -2187,6 +2402,7 @@ function openEditCardModal(sheetRow, uid) {
   const schema  = isTutor ? C : CP;
   const name    = isTutor ? cell(row, C.NAME) : cell(row, CP.NAME);
 
+  _editCardIsNew    = false;
   _editCardSheetRow = sheetRow;
   _editCardSection  = currentSection;
   _editCardRI       = ri;
@@ -2197,7 +2413,7 @@ function openEditCardModal(sheetRow, uid) {
 
   const body = document.getElementById('edit-card-body');
   body.innerHTML = fields.map(f => {
-    const val = cell(row, schema[f.col]);
+    const val = cell(row, schema[f.col]) || '';
     if (f.type === 'select') {
       const opts = ['', ...f.opts].map(o =>
         `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o) || '—'}</option>`
@@ -2206,6 +2422,22 @@ function openEditCardModal(sheetRow, uid) {
     }
     if (f.type === 'textarea') {
       return `<label class="modal-label">${f.label}</label><textarea id="${f.id}" class="cal-desc-area" rows="2">${esc(val)}</textarea>`;
+    }
+    if (f.type === 'multicheck') {
+      const selected = val.split(',').map(s => s.trim()).filter(Boolean);
+      const knownOpts = new Set(f.opts);
+      const otherVals = selected.filter(s => !knownOpts.has(s));
+      const checkboxes = f.opts.map(o =>
+        `<label class="ec-check-label"><input type="checkbox" class="ec-checkbox" data-group="${f.id}" value="${esc(o)}"${selected.includes(o) ? ' checked' : ''}> ${esc(o)}</label>`
+      ).join('');
+      const otherInput = `<input type="text" id="${f.id}-other" class="modal-input ec-other-input" placeholder="Other (specify)" value="${esc(otherVals.join(', '))}" autocomplete="off">`;
+      return `<label class="modal-label">${f.label}</label><div class="ec-check-group" id="${f.id}">${checkboxes}</div>${otherInput}`;
+    }
+    if (f.type === 'radio') {
+      const radios = f.opts.map(o =>
+        `<label class="ec-check-label"><input type="radio" name="${f.id}" value="${esc(o)}"${o === val ? ' checked' : ''}> ${esc(o)}</label>`
+      ).join('');
+      return `<label class="modal-label">${f.label}</label><div class="ec-check-group" id="${f.id}">${radios}</div>`;
     }
     return `<label class="modal-label">${f.label}${f.hint ? `<span class="modal-hint"> — ${f.hint}</span>` : ''}</label><input id="${f.id}" class="modal-input" type="${f.type}" value="${esc(val)}" autocomplete="off">`;
   }).join('');
@@ -2217,7 +2449,61 @@ function closeEditCardModal() {
   document.getElementById('edit-card-modal').style.display = 'none';
 }
 
+async function _saveNewTutor() {
+  const nameVal = (document.getElementById('ec-name')?.value || '').trim();
+  if (!nameVal) { showToast('Name is required', 'error'); return; }
+
+  showLoader();
+  try {
+    const appId = await _generateNextTutorId();
+    const submitted = nowSheetFmt();
+
+    // Build a 31-element row (indices 0-30 matching C constants)
+    const newRow = new Array(31).fill('');
+    newRow[C.APP_ID]    = appId;
+    newRow[C.SUBMITTED] = submitted;
+    newRow[C.CONTACTED] = 'No';
+    newRow[C.MAIL_SENT] = 'No';
+
+    TUTOR_EDIT_FIELDS.forEach(f => {
+      let val;
+      if (f.type === 'multicheck') {
+        const checked = [...document.querySelectorAll(`.ec-checkbox[data-group="${f.id}"]:checked`)].map(cb => cb.value);
+        const otherEl = document.getElementById(`${f.id}-other`);
+        const otherRaw = otherEl ? otherEl.value.trim() : '';
+        const otherVals = otherRaw ? otherRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+        val = [...checked.filter(v => v !== 'Other'), ...otherVals].join(', ');
+        if (checked.includes('Other') && otherVals.length === 0) val = [...checked].join(', ');
+      } else if (f.type === 'radio') {
+        const checked = document.querySelector(`input[name="${f.id}"]:checked`);
+        val = checked ? checked.value : '';
+      } else {
+        const el = document.getElementById(f.id);
+        if (!el) return;
+        val = el.value.trim ? el.value.trim() : el.value;
+      }
+      newRow[C[f.col]] = val || '';
+    });
+
+    const sheet = encodeURIComponent(`${SHEETS.TUTORS_APPLIED}!A1`);
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${sheet}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [newRow] }) }
+    );
+
+    hideLoader();
+    closeEditCardModal();
+    showToast(`${nameVal} added`);
+    // Reload to get correct sheetRow + fresh data
+    loadApplications();
+  } catch (err) {
+    hideLoader();
+    showToast('Failed to add: ' + err.message, 'error');
+  }
+}
+
 async function saveEditCard() {
+  if (_editCardIsNew) { await _saveNewTutor(); return; }
   const ri = _editCardRI;
   if (ri === null || ri === -1) return;
   const isTutor = _editCardSection === 'tutors';
@@ -2227,10 +2513,23 @@ async function saveEditCard() {
 
   const updates = [];
   fields.forEach(f => {
-    const el  = document.getElementById(f.id);
-    if (!el) return;
-    const newVal = (f.type === 'select' || f.type === 'textarea') ? el.value : el.value.trim();
-    const oldVal = cell(row, schema[f.col]);
+    let newVal;
+    if (f.type === 'multicheck') {
+      const checked = [...document.querySelectorAll(`.ec-checkbox[data-group="${f.id}"]:checked`)].map(cb => cb.value);
+      const otherEl = document.getElementById(`${f.id}-other`);
+      const otherRaw = otherEl ? otherEl.value.trim() : '';
+      const otherVals = otherRaw ? otherRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+      newVal = [...checked.filter(v => v !== 'Other'), ...otherVals].join(', ');
+      if (checked.includes('Other') && otherVals.length === 0) newVal = [...checked].join(', ');
+    } else if (f.type === 'radio') {
+      const checked = document.querySelector(`input[name="${f.id}"]:checked`);
+      newVal = checked ? checked.value : '';
+    } else {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      newVal = (f.type === 'select' || f.type === 'textarea') ? el.value : el.value.trim();
+    }
+    const oldVal = cell(row, schema[f.col]) || '';
     if (newVal !== oldVal) updates.push({ col: schema[f.col], val: newVal });
   });
 
@@ -2277,7 +2576,7 @@ async function _doTrashCard(sheetRow, uid) {
   try {
     await ensureSheetIds();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(binSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(binSheet)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
     );
     const srcId = sheetIdMap[cfg.sheet];
@@ -2296,6 +2595,7 @@ async function _doTrashCard(sheetRow, uid) {
     });
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
     document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    if (typeof _tabCounts['bin'] === 'number') _tabCounts['bin']++;
     updateStats();
     const rc = document.getElementById('result-count');
     const label = currentSection === 'parents' ? 'contacts' : 'applications';
@@ -2317,20 +2617,27 @@ async function restoreCard(sheetRow, uid) {
     ? (cell(row, C.ORIGINAL_TAB)  || SHEETS.TUTORS_APPLIED)
     : (cell(row, CP.ORIGINAL_TAB) || SHEETS.PARENTS_TO_CONTACT);
 
-  const rowCopy = [...row];
+  // Bin and Applied have different column layouts at indices 28-29.
+  // Applied: ..., SCHEDULED_PARENT(28), _UNUSED(29), SOURCE(30)
+  // Bin:     ..., DELETED_AT(28),       ORIGINAL_TAB(29), SOURCE(30)
+  // _doTrashCard overwrites 28+29 with DELETED_AT/ORIGINAL_TAB; SOURCE stays at 30 in both.
+  let rowCopy;
   if (currentSection === 'tutors') {
-    rowCopy[C.DELETED_AT]   = '';
-    rowCopy[C.ORIGINAL_TAB] = '';
+    rowCopy = row.slice(0, 28);                  // cols 0-27 identical in both sheets
+    rowCopy[28] = '';                            // SCHEDULED_PARENT: lost when trashed, restore empty
+    rowCopy[29] = '';                            // unused col: restore empty
+    rowCopy[30] = row[30] || '';                 // SOURCE: same index 30 in both Bin and Applied
+    rowCopy.length = 31;                         // Applied row is 31 columns (0-30)
   } else {
-    rowCopy[CP.DELETED_AT]   = '';
-    rowCopy[CP.ORIGINAL_TAB] = '';
+    rowCopy = row.slice(0, CP.DELETED_AT);       // cols 0-15 identical
+    rowCopy.length = CP.DELETED_AT;              // hard-cap to parents column count
   }
 
   showLoader();
   try {
     await ensureSheetIds();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheet)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
     );
     const binSheet = currentSection === 'tutors' ? SHEETS.TUTORS_BIN : SHEETS.PARENTS_BIN;
@@ -2343,8 +2650,9 @@ async function restoreCard(sheetRow, uid) {
       }}}]})}
     );
     allRows.splice(ri, 1);
-    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
-    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    allRows.forEach(r => { if (r._sheetRow > sheetRow) r._sheetRow--; });
+    document.querySelector(`tr[data-uid="${uid}"]`)?.remove();
+    if (typeof _tabCounts['bin'] === 'number') _tabCounts['bin'] = Math.max(0, _tabCounts['bin'] - 1);
     updateStats();
     const label = currentSection === 'parents' ? 'contacts' : 'applications';
     document.getElementById('result-count').textContent = `${allRows.length} ${label}`;
@@ -2367,7 +2675,7 @@ async function moveCard(sheetRow, uid, destSheetName) {
   try {
     await ensureSheetIds();
     await apiFetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheetName)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheetName)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
     );
     const srcId = sheetIdMap[cfg.sheet];
@@ -2379,6 +2687,7 @@ async function moveCard(sheetRow, uid, destSheetName) {
       }}}]})}
     );
     allRows.splice(ri, 1);
+    allRows.forEach(r => { if (r._sheetRow > sheetRow) r._sheetRow--; });
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
     document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
     updateStats();
@@ -2419,7 +2728,7 @@ function showPostScheduleMoveModal(sheetRow, uid, waFn) {
   modal.style.display = 'flex';
 }
 
-async function updateStatus(sheetRow, uid, status) {
+async function updateStatus(sheetRow, uid, status, { suppressToast = false } = {}) {
   const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
   if (ri === -1) return;
   const col = currentSection === 'tutors' ? C.STATUS : CP.STATUS;
@@ -2439,10 +2748,12 @@ async function updateStatus(sheetRow, uid, status) {
       updateStats();
       const label = currentSection === 'parents' ? 'contacts' : 'applications';
       document.getElementById('result-count').textContent = `${allRows.length} ${label}`;
-      const toastMsg = status
-        ? `${personName} moved to ${status}`
-        : `${personName} taken out of ${cfg.label}`;
-      showToast(toastMsg);
+      if (!suppressToast) {
+        const toastMsg = status
+          ? `${personName} moved to ${status}`
+          : `${personName} taken out of ${cfg.label}`;
+        showToast(toastMsg);
+      }
     } else {
       // On All tab: re-render the status badge in this card
       const badge = document.querySelector(`.status-badge[data-uid="${uid}"]`);
@@ -2450,7 +2761,7 @@ async function updateStatus(sheetRow, uid, status) {
         badge.textContent = status;
         badge.className   = `status-badge${status ? ` badge-${status.toLowerCase().replace('-','').replace(' ','_')}` : ' badge-hidden'}`;
       }
-      if (status) showToast(`${personName} added to ${status}`);
+      if (!suppressToast && status) showToast(`${personName} added to ${status}`);
     }
     hideLoader();
   } catch (err) {
@@ -2496,10 +2807,71 @@ function closeMoveModal() {
   document.getElementById('move-modal').style.display = 'none';
 }
 
-let _callMoveTimeout = null;
+// ── COMMUNICATION TAP → CONTACTED + IN-LOOP PROMPT ────────────────────────────
+let _inLoopTargetRow = null;
+let _inLoopTargetUid = null;
+
+function showInLoopModal(sheetRow, uid, name) {
+  _inLoopTargetRow = sheetRow;
+  _inLoopTargetUid = uid;
+  document.getElementById('inloop-modal-name').textContent = name;
+  document.getElementById('inloop-modal').style.display = 'flex';
+}
+
+function closeInLoopModal() {
+  document.getElementById('inloop-modal').style.display = 'none';
+  _inLoopTargetRow = null;
+  _inLoopTargetUid = null;
+}
+
+async function confirmInLoop() {
+  const sheetRow = _inLoopTargetRow;
+  const uid      = _inLoopTargetUid;
+  closeInLoopModal();
+  if (sheetRow == null) return;
+
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+
+  allRows[ri][C.STATUS] = 'In-Loop';
+  const badge = document.querySelector(`tr.data-row[data-uid="${uid}"] .status-badge`);
+  if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
+  updateStats();
+
+  try {
+    await updateCell(sheetRow, C.STATUS + 1, 'In-Loop');
+    showToast(`${allRows[ri][C.NAME] || ''} added to In-Loop`);
+  } catch (err) {
+    allRows[ri][C.STATUS] = '';
+    if (badge) { badge.textContent = ''; badge.className = 'status-badge badge-hidden'; }
+    showToast('Failed to update status: ' + err.message, 'error');
+  }
+}
+
+async function handleCommunicationTap(sheetRow, uid) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+
+  const name        = cell(allRows[ri], C.NAME);
+  const alreadyLoop = (cell(allRows[ri], C.STATUS) || '') === 'In-Loop';
+
+  // Mark Contacted = Yes if not already
+  if (cell(allRows[ri], C.CONTACTED) !== 'Yes') {
+    allRows[ri][C.CONTACTED] = 'Yes';
+    const pill = document.querySelector(`.pill-toggle[data-sheet-row="${sheetRow}"][data-col="${C.CONTACTED + 1}"]`);
+    if (pill) { pill.className = 'pill-toggle yes'; pill.dataset.current = 'Yes'; }
+    updateCell(sheetRow, C.CONTACTED + 1, 'Yes').catch(err => {
+      allRows[ri][C.CONTACTED] = 'No';
+      if (pill) { pill.className = 'pill-toggle no'; pill.dataset.current = 'No'; }
+      showToast('Failed to mark contacted: ' + err.message, 'error');
+    });
+  }
+
+  if (!alreadyLoop) showInLoopModal(sheetRow, uid, name);
+}
+
 function handleCallTap(sheetRow, uid) {
-  clearTimeout(_callMoveTimeout);
-  _callMoveTimeout = setTimeout(() => showMoveModal(sheetRow, uid), 3000);
+  handleCommunicationTap(sheetRow, uid);
 }
 
 function daysLeft(deletedAtStr) {
