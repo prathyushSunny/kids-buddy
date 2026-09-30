@@ -825,6 +825,14 @@ function buildTargetRow(namedValues, appId) {
     if (header === "Current Students")      return "";
     if (header === "Rating")                return "";
 
+    if (header === "Phone") {
+      const rawVal = getResponse(namedValues, TARGET_TO_FORM["Phone"]);
+      let digits = String(rawVal || "").replace(/\D/g, "");
+      if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+      if (digits.length === 11 && digits.startsWith("0"))  digits = digits.slice(1);
+      return digits;
+    }
+
     const formQuestion = TARGET_TO_FORM[header];
     if (!formQuestion) return "";
 

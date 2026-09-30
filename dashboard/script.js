@@ -514,7 +514,11 @@ function updateStats() {
   if (!cfg.statusFilter && !cfg.isBin && !cfg.isDraft) {
     // On "All" tab — compute counts for all status-filter tabs from allRows
     const statusCol = currentSection === 'parents' ? CP.STATUS : C.STATUS;
+    const _prevBin   = _tabCounts['bin'];
+    const _prevDraft = _tabCounts['draft'];
     _tabCounts = {};
+    if (_prevBin   !== undefined) _tabCounts['bin']   = _prevBin;
+    if (_prevDraft !== undefined) _tabCounts['draft']  = _prevDraft;
     SECTION_TABS[currentSection].forEach(t => {
       if (t.statusFilter) {
         _tabCounts[t.key] = allRows.filter(r => (r[statusCol] || '') === t.statusFilter).length;
@@ -557,7 +561,7 @@ const INFO_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" st
 const CLASSES_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
 const STUDENT_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
 const MOVE_SVG       = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
-const HAMBURGER_SVG  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`;
+const HAMBURGER_SVG  = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="9" cy="9" r="8" stroke="currentColor" stroke-width="1.5"/><circle cx="5.5" cy="9" r="1.1" fill="currentColor"/><circle cx="9" cy="9" r="1.1" fill="currentColor"/><circle cx="12.5" cy="9" r="1.1" fill="currentColor"/></svg>`;
 const SUBJECTS_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
 const PIN_SVG      = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 const RUPEE_SVG    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`;
@@ -609,7 +613,8 @@ function appendRows() {
     const ivStatus    = cell(row, C.INTERVIEW_STATUS);
     const ivAt        = cell(row, C.INTERVIEW_AT);
 
-    const digits = phone.replace(/\D/g, '');
+    let digits = phone.replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
     const waNum  = digits.length === 10 ? '91' + digits : digits;
     const waHref = digits
       ? `https://wa.me/${waNum}?text=${encodeURIComponent('Hello ' + name + ', I\'m contacting you regarding your submission for KidsBuddy home tuitions.')}`
@@ -680,9 +685,9 @@ function appendRows() {
       <td class="td-date">${esc(submittedFmt)}</td>
       <td>
         <div class="card-top-actions">
+          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
           <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
-          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
@@ -772,7 +777,8 @@ function appendParentRows() {
     const subjects  = cell(row, CP.SUBJECTS_NEEDED);
     const dateFmt   = formatDate(cell(row, CP.ONBOARDED_ON));
 
-    const digits = phone.replace(/\D/g, '');
+    let digits = phone.replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
     const waNum  = digits.length === 10 ? '91' + digits : digits;
     const waHref = digits
       ? `https://wa.me/${waNum}?text=${encodeURIComponent('Hello ' + name + ', contacting you regarding home tuitions.')}`
@@ -831,9 +837,9 @@ function appendParentRows() {
       <td class="td-date">${esc(dateFmt)}</td>
       <td>
         <div class="card-top-actions">
+          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
           <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
-          <button class="btn-card-move" onclick="event.stopPropagation();openCardActions(${sheetRow},'${uid}')" title="Actions">${HAMBURGER_SVG}<span class="card-action-label">Actions</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
@@ -1661,7 +1667,8 @@ function buildWAMessage(role) {
 function sendWATo(role) {
   const phone = role === 'tutor' ? _waShareData.tutorPhone : _waShareData.parentPhone;
   if (!phone) return;
-  const digits = phone.replace(/\D/g,'');
+  let digits = phone.replace(/\D/g,'');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
   const num    = digits.length === 10 ? '91' + digits : digits;
   const msgEl  = document.getElementById(role === 'tutor' ? 'wa-tutor-msg' : 'wa-parent-msg');
   const msg    = encodeURIComponent(msgEl ? msgEl.value : buildWAMessage(role));
@@ -1937,6 +1944,10 @@ function openBulkMoveModal() {
     `<button class="btn-move-opt" onclick="closeMoveModal();bulkMarkContacted('Yes')">Mark Contacted</button>` +
     `<button class="btn-move-opt" onclick="closeMoveModal();bulkMarkContacted('No')">Mark not Contacted</button>`;
 
+  if (currentSection === 'tutors' && !cfg.isDraft) {
+    optsHTML += `<button class="btn-move-opt btn-move-draft" onclick="closeMoveModal();bulkMoveToDraft()">Move to Draft</button>`;
+  }
+
   modal.querySelector('.move-sheet-title').textContent = 'Actions';
   document.getElementById('move-options').innerHTML = optsHTML;
   modal.style.display = 'flex';
@@ -2018,6 +2029,28 @@ function bulkDelete() {
   );
 }
 
+async function bulkMoveToDraft() {
+  const count = selectedUids.size;
+  if (!count) return;
+  showConfirm(
+    `Move ${count} ${count === 1 ? 'tutor' : 'tutors'} to Draft?<br><span class="confirm-sub">Saved permanently — no auto-purge.</span>`,
+    async () => {
+      showLoader();
+      const uids = [...selectedUids];
+      let moved = 0;
+      for (const uid of uids) {
+        const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+        if (!el) continue;
+        await _doMoveToDraft(parseInt(el.dataset.sheetRow), uid, true);
+        moved++;
+      }
+      clearSelection();
+      hideLoader();
+      if (moved) showToast(`${moved} ${moved === 1 ? 'tutor' : 'tutors'} moved to Draft`);
+    }
+  );
+}
+
 // ── TRASH / BIN ───────────────────────────────────────────────────────────────
 async function ensureSheetIds() {
   if (Object.keys(sheetIdMap).length) return;
@@ -2088,7 +2121,7 @@ async function moveToDraft(sheetRow, uid) {
   showConfirm('Move to Draft?<br><span class="confirm-sub">Saved permanently in Draft — no auto-purge.</span>', () => _doMoveToDraft(sheetRow, uid));
 }
 
-async function _doMoveToDraft(sheetRow, uid) {
+async function _doMoveToDraft(sheetRow, uid, suppressToast = false) {
   const cfg = currentTabConfig();
   const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
   if (ri === -1) return;
@@ -2118,12 +2151,12 @@ async function _doMoveToDraft(sheetRow, uid) {
     });
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
     document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
-    if (typeof _tabCounts['draft'] === 'number') _tabCounts['draft']++;
+    _tabCounts['draft'] = (_tabCounts['draft'] || 0) + 1;
     updateStats();
     const rc = document.getElementById('result-count');
     rc.textContent = `${allRows.length} applications`;
     hideLoader();
-    showToast(`${name} moved to Draft`);
+    if (!suppressToast) showToast(`${name} moved to Draft`);
   } catch (err) {
     hideLoader();
     showToast('Failed to move to draft: ' + err.message, 'error');
@@ -2975,7 +3008,10 @@ function numToCol(n) {
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
-function cell(row, idx) { return String(row[idx] || '').trim(); }
+function cell(row, idx) {
+  const v = String(row[idx] || '').trim();
+  return /^#[A-Z\/0-9]+[!?]$/.test(v) ? '' : v;
+}
 
 // Parse "DD/MM/YYYY HH:MM:SS" (Google Sheets locale) → Date object
 function parseDate(str) {
