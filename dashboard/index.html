@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KidsBuddy — Applications Dashboard</title>
+  <title>KidsBuddy CMS</title>
   <link rel="icon" type="image/x-icon" href="favicon_io/favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon_io/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="favicon_io/favicon-16x16.png">
@@ -34,12 +34,14 @@
       --muted:    #64748b;
       --primary:  #4f8ef7;
       --primary2: #3b6fd4;
-      --green:    #22c55e;
+
       --radius:   8px;
       --shadow:   0 1px 3px rgba(0,0,0,0.08);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { background: #e8edf2; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -47,6 +49,9 @@
       color: var(--text);
       font-size: 14px;
       line-height: 1.5;
+      max-width: 640px;
+      margin: 0 auto;
+      min-height: 100vh;
     }
 
     /* ── Sign-in ── */
@@ -69,7 +74,7 @@
     }
 
     .signin-card h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-    .signin-card p  { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+    .signin-card p  { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
 
     /* ── Dashboard ── */
     /* Both screens hidden by default — the inline script below shows the right one
@@ -162,10 +167,10 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .sub-tab.active       { color: var(--primary); border-bottom-color: var(--primary); }
-    .sub-tab.bin-tab      { color: #ef4444; }
-    .sub-tab.bin-tab.active { border-bottom-color: #ef4444; }
+    .sub-tab.bin-tab      { color: var(--muted); }
+    .sub-tab.bin-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-    .main { max-width: 1440px; margin: 0 auto; padding: 24px; }
+    .main { padding: 12px; }
 
     /* ── Stats ── */
     .stats {
@@ -196,10 +201,16 @@
     /* ── Controls ── */
     .controls {
       display: flex;
-      gap: 10px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 8px;
     }
+    .controls-row2 { display: flex; gap: 8px; }
+    .controls-row2 .btn { flex: 1; }
+    .btn.btn-ghost {
+      background: white; color: var(--text); border: 1px solid var(--border);
+    }
+    .btn.btn-ghost:hover { border-color: var(--primary); color: var(--primary); background: white; }
 
     .search-input {
       flex: 1;
@@ -208,6 +219,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       font-size: 14px;
+      font-family: inherit;
       background: var(--surface);
       outline: none;
     }
@@ -265,7 +277,7 @@
       transition: background 0.1s;
     }
     tbody tr.data-row:hover    { background: #f8fafc; }
-    tbody tr.data-row.expanded { background: #eff6ff; }
+    tbody tr.data-row.expanded { background: #f8fafc; }
 
     td { padding: 10px 14px; vertical-align: middle; }
 
@@ -293,8 +305,8 @@
       cursor: pointer;
       min-width: 40px;
     }
-    .btn-toggle.yes { background: #dcfce7; color: #15803d; }
-    .btn-toggle.no  { background: #fee2e2; color: #b91c1c; }
+    .btn-toggle.yes { background: var(--bg); color: var(--primary); border-color: var(--primary); }
+    .btn-toggle.no  { background: var(--bg); color: var(--muted); }
     .btn-toggle:hover   { opacity: 0.75; }
     .btn-toggle:disabled { opacity: 0.45; cursor: wait; }
 
@@ -361,15 +373,98 @@
 
     .save-status { font-size: 11px; color: var(--muted); margin-top: 3px; height: 16px; }
 
+    /* ── App Loader ── */
+    #page-loader {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(8, 10, 18, 0.38);
+      z-index: 600;
+      backdrop-filter: blur(7px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #page-loader.visible { opacity: 1; pointer-events: auto; }
+    .app-loader {
+      position: relative;
+      width: 104px;
+      height: 104px;
+    }
+    .app-loader-icon {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 68px; height: 68px;
+      border-radius: 16px;
+    }
+    .app-loader-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      animation: kb-spin 0.75s linear infinite;
+    }
+    @keyframes kb-spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 10px 14px 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      pointer-events: auto;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      white-space: nowrap;
+      max-width: calc(100vw - 32px);
+      opacity: 1;
+      transition: opacity 0.35s ease;
+    }
+    .toast.toast-error { background: #7f1d1d; }
+    .toast.toast-fade { opacity: 0; }
+    .toast-msg { overflow: hidden; text-overflow: ellipsis; }
+    .toast-close {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
     /* ── Misc ── */
     .state-msg { text-align: center; padding: 60px 20px; color: var(--muted); }
 
     .error-banner {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
+      background: var(--bg);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 12px 16px;
-      color: #b91c1c;
+      color: #dc2626;
       font-size: 13px;
       margin-bottom: 16px;
       display: none;
@@ -405,18 +500,18 @@
     }
     .pill-toggle .pt-yes,
     .pill-toggle .pt-no  { display: none; padding: 3px 10px; font-size: 11px; font-weight: 700; }
-    .pill-toggle.yes .pt-yes { display: inline-flex; align-items: center; background: #dcfce7; color: #16a34a; border-radius: 20px; }
-    .pill-toggle.no  .pt-no  { display: inline-flex; align-items: center; background: #fef2f2; color: #dc2626; border-radius: 20px; }
+    .pill-toggle.yes .pt-yes { display: inline-flex; align-items: center; background: rgba(79,142,247,0.12); color: var(--primary); border-radius: 20px; }
+    .pill-toggle.no  .pt-no  { display: inline-flex; align-items: center; background: var(--bg); color: var(--muted); border-radius: 20px; }
 
     /* Contact icons (WA + mail) in phone cell */
     .td-phone    { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .contact-icons { display: inline-flex; gap: 5px; }
-    .icon-call { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #f0fdf4; color: #16a34a; text-decoration: none; }
-    .icon-wa   { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #dcfce7; color: #16a34a; text-decoration: none; }
-    .icon-mail { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: #eff6ff; color: #4f46e5; text-decoration: none; }
-    .icon-call:hover { background: #dcfce7; }
-    .icon-wa:hover   { background: #bbf7d0; }
-    .icon-mail:hover { background: #dbeafe; }
+    .icon-call { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--bg); color: var(--muted); text-decoration: none; }
+    .icon-wa   { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(37,211,102,0.10); color: #25D366; text-decoration: none; }
+    .icon-mail { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--bg); color: var(--muted); text-decoration: none; }
+    .icon-call:hover { background: var(--border); color: var(--text); }
+    .icon-wa:hover   { background: rgba(37,211,102,0.20); }
+    .icon-mail:hover { background: var(--border); color: var(--text); }
 
     /* Mobile-extra details hidden on desktop */
     .mobile-extra { display: none; }
@@ -426,292 +521,352 @@
 
     /* Expand button (hidden on desktop, shown as card footer on mobile) */
     .td-expand   { display: none; }
-    .btn-expand  {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      width: 100%; padding: 9px 0; border: none; background: none;
-      color: #374151; font-size: 13px; font-weight: 500;
+    .btn-expand {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; padding: 12px 0; border: none; background: none;
+      color: var(--muted); font-size: 18px; font-weight: 600;
       cursor: pointer; border-top: 1px solid var(--border); margin-top: 10px;
+      line-height: 1;
     }
-    /* CSS chevron — looks like a V */
-    .expand-chevron {
-      display: inline-block; width: 8px; height: 8px;
-      border-right: 2px solid #374151; border-bottom: 2px solid #374151;
-      transform: rotate(45deg); margin-top: -4px; transition: transform 0.2s;
-    }
-    .expand-chevron.up { transform: rotate(-135deg); margin-top: 3px; }
+    .expand-icon { transition: transform 0.2s; flex-shrink: 0; }
 
     /* ── Mobile ────────────────────────────────────────────────────────────── */
-    @media (max-width: 639px) {
 
-      /* Layout */
-      .main { padding: 12px; }
+    /* Layout */
+    .main { padding: 12px; }
 
-      /* Sign-in */
-      .signin-card { padding: 40px 24px; border-radius: 12px; margin: 16px; }
+    /* Sign-in */
+    .signin-card { padding: 40px 24px; border-radius: 12px; margin: 16px; }
 
-      /* Topbar */
-      .topbar { padding: 10px 16px; }
-      #user-email { display: none; }
+    /* Topbar */
+    .topbar { padding: 10px 16px; }
+    #user-email { display: none; }
 
-      /* Tab bar — tighter on mobile, sticky offset matches slimmer topbar */
-      .tab-bar { top: 45px; padding: 8px 12px 0; }
-      .section-tab { padding: 5px 14px; font-size: 12px; }
-      .sub-tab { padding: 7px 14px; font-size: 12px; }
+    /* Tab bar — tighter on mobile, sticky offset matches slimmer topbar */
+    .tab-bar { top: 45px; padding: 8px 12px 0; }
+    .section-tab { padding: 5px 14px; font-size: 12px; }
+    .sub-tab { padding: 7px 14px; font-size: 12px; }
 
-      /* Stats — keep 3-in-a-row but compact */
-      .stats { gap: 8px; }
-      .stat-card { padding: 10px 12px; }
-      .stat-label { font-size: 9px; }
-      .stat-value { font-size: 20px; }
+    /* Stats — keep 3-in-a-row but compact */
+    .stats { gap: 8px; }
+    .stat-card { padding: 10px 12px; }
+    .stat-label { font-size: 9px; }
+    .stat-value { font-size: 20px; }
 
-      /* Controls — stack vertically */
-      .controls { flex-direction: column; gap: 8px; }
-      .search-input { min-width: unset; width: 100%; font-size: 16px; /* prevent iOS zoom */ }
-      select { width: 100%; font-size: 16px; }
-      .btn { width: 100%; padding: 10px; }
+    /* Controls — stack vertically */
+    .controls { flex-direction: column; gap: 8px; }
+    .search-input { min-width: unset; width: 100%; font-size: 16px; /* prevent iOS zoom */ }
+    select { width: 100%; font-size: 16px; }
+    .btn { width: 100%; padding: 10px; }
 
-      /* Result count */
-      .result-count { font-size: 11px; }
+    /* Result count */
+    .result-count { font-size: 11px; }
 
-      /* ── Table → Cards ── */
-      .table-wrap {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        border-radius: 0;
-        overflow: visible;
-      }
-
-      table  { display: block; }
-      thead  { display: none; }
-      tbody  { display: flex; flex-direction: column; gap: 10px; }
-
-      /* Each data row becomes a card */
-      tr.data-row {
-        display: grid;
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto;
-        gap: 3px 10px;
-        background: white;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 14px;
-        box-shadow: var(--shadow);
-        cursor: pointer;
-        transition: background 0.1s;
-        position: relative;
-      }
-      tr.data-row:hover    { background: white; }
-      tr.data-row.expanded {
-        background: #eff6ff;
-        border-bottom-left-radius: 0;
-        border-bottom-right-radius: 0;
-        border-bottom-color: transparent;
-      }
-
-      /* Reset td defaults */
-      td { padding: 0; vertical-align: top; border: none; }
-
-      /* App ID — hidden */
-      tr.data-row td:nth-child(1) { display: none; }
-
-      /* Name — col 1 row 1 */
-      tr.data-row td:nth-child(2) {
-        grid-column: 1; grid-row: 1;
-        font-size: 15px; font-weight: 700; line-height: 1.3;
-        padding-right: 90px;
-      }
-
-      /* Phone + WhatsApp — col 1 row 2 */
-      tr.data-row td:nth-child(3) {
-        grid-column: 1; grid-row: 2;
-        font-size: 13px; padding-top: 3px;
-      }
-
-      /* Classes — col 1 row 3 */
-      tr.data-row td:nth-child(4) {
-        grid-column: 1; grid-row: 3;
-        font-size: 12px; color: var(--muted); padding-top: 3px;
-      }
-
-      /* Submitted date td — hidden on mobile (shown inline above name instead) */
-      tr.data-row td:nth-child(5) { display: none; }
-
-      /* Applied-at label above name */
-      .card-applied-at {
-        display: block;
-        font-size: 11px; color: var(--muted);
-        margin-bottom: 6px;
-      }
-
-      /* Contacted toggle — absolute top-right, no grid impact */
-      tr.data-row td:nth-child(6) {
-        position: absolute; top: 14px; right: 14px;
-        display: flex; flex-direction: column; align-items: flex-end;
-      }
-
-      /* Mail Sent — hidden on mobile (stays in sheet) */
-      tr.data-row td:nth-child(7) { display: none; }
-
-      /* Expand button — full width, row 5 */
-      tr.data-row td.td-expand {
-        display: block;
-        grid-column: 1 / -1; grid-row: 5;
-      }
-
-      /* Toggle label (Contacted) visible on mobile */
-      .toggle-label {
-        display: block;
-        font-size: 10px; color: var(--muted);
-        text-align: right; margin-bottom: 2px;
-      }
-
-      /* Pill toggle — show both segments on mobile */
-      .pill-toggle {
-        border: 1.5px solid #e5e7eb;
-        border-radius: 20px;
-        overflow: hidden;
-        min-width: 78px;
-      }
-      .pill-toggle .pt-yes,
-      .pill-toggle .pt-no  { display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 5px 10px; font-size: 11px; font-weight: 700; }
-      /* YES active — YES is right span (NO|YES order) */
-      .pill-toggle.yes { border-color: #16a34a; }
-      .pill-toggle.yes .pt-yes { background: #dcfce7; color: #16a34a; border-radius: 0 20px 20px 0; }
-      .pill-toggle.yes .pt-no  { background: #fff;    color: #9ca3af; }
-      /* NO active — NO is left span */
-      .pill-toggle.no  { border-color: #dc2626; }
-      .pill-toggle.no  .pt-no  { background: #fef2f2; color: #dc2626; border-radius: 20px 0 0 20px; }
-      .pill-toggle.no  .pt-yes { background: #fff;    color: #9ca3af; }
-
-      /* Mobile-extra: subjects + location below classes */
-      .mobile-extra { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
-      .me-row { font-size: 11px; color: var(--muted); }
-
-      /* Expand button full-width tap area */
-      .btn-expand { margin-top: 8px; padding: 10px 0; font-size: 13px; }
-
-      /* Detail row — block below the card, visually connected */
-      tr.detail-row        { display: none; }
-      tr.detail-row.open   { display: block; }
-      tr.detail-row td {
-        display: block;
-        border: 1px solid var(--border);
-        border-top: none;
-        border-radius: 0 0 12px 12px;
-        padding: 14px;
-        background: #f8fafc;
-        cursor: default;
-      }
-
-      /* Detail grid — 2 col on mobile */
-      .detail-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 14px;
-      }
-
-      /* Notes — label above textarea */
-      .notes-row      { flex-direction: column; gap: 6px; }
-      .notes-label    { padding-top: 0; }
-      .notes-input    { font-size: 16px; /* prevent iOS zoom */ }
-
-      /* State message */
-      .state-msg { padding: 40px 16px; }
+    /* ── Table → Cards ── */
+    .table-wrap {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+      overflow: visible;
     }
 
-    /* ── Inline notes (shared, inside card) ─────────────────────────── */
-    .card-notes { margin-top: 8px; }
+    table  { display: block; }
+    thead  { display: none; }
+    tbody  { display: flex; flex-direction: column; gap: 10px; }
 
-    /* Box shown when notes exist — clickable to edit */
-    .card-notes-box {
-      border: 1px solid #dde3ec;
-      border-radius: 8px;
+    /* Each data row becomes a card */
+    tr.data-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+      gap: 3px 10px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 14px 0;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: background 0.1s;
+      position: relative;
+    }
+    tr.data-row:hover    { background: white; }
+    tr.data-row.expanded {
+      background: #f8fafc;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-color: transparent;
+      box-shadow: none;
+    }
+
+    /* Reset td defaults */
+    td { padding: 0; vertical-align: top; border: none; }
+
+    /* App ID — hidden */
+    tr.data-row td:nth-child(1) { display: none; }
+
+    /* Name — col 1 row 1 */
+    tr.data-row td:nth-child(2) {
+      grid-column: 1; grid-row: 1;
+      font-size: 15px; font-weight: 700; line-height: 1.3;
+      padding-right: 40px;
+    }
+
+    /* Phone + WhatsApp — col 1 row 2 */
+    tr.data-row td:nth-child(3) {
+      grid-column: 1; grid-row: 2;
+      font-size: 13px; padding-top: 3px;
+    }
+
+    /* Classes — col 1 row 2 (phone row is hidden, moved into Contact section) */
+    tr.data-row td:nth-child(4) {
+      grid-column: 1; grid-row: 2;
+      font-size: 12px; color: var(--muted); padding-top: 6px;
+    }
+
+    /* Submitted date td — hidden on mobile (shown inline above name instead) */
+    tr.data-row td:nth-child(5) { display: none; }
+
+    /* Applied-at label above name */
+    .card-applied-at {
+      display: block;
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    /* Status badge — block on mobile so it sits between date and name */
+    .status-badge:not(.badge-hidden) { display: block; width: fit-content; margin-bottom: 4px; }
+
+    /* Move + Trash buttons — absolute top-right stack */
+    tr.data-row td:nth-child(6) {
+      position: absolute; top: 14px; right: 14px;
+    }
+    tr.data-row td:nth-child(6) .card-top-actions {
+      margin-bottom: 0; align-self: auto;
+    }
+
+    /* Mail Sent — hidden on mobile (stays in sheet) */
+    tr.data-row td:nth-child(7) { display: none; }
+
+    /* Expand button — full width, row 5 */
+    tr.data-row td.td-expand {
+      display: block;
+      grid-column: 1 / -1; grid-row: 5;
+    }
+
+    /* Pill toggle — show both segments on mobile */
+    .pill-toggle {
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
       overflow: hidden;
+      display: inline-flex;
+    }
+    .pill-toggle .pt-yes,
+    .pill-toggle .pt-no  { display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    /* YES active */
+    .pill-toggle.yes { border-color: var(--primary); }
+    .pill-toggle.yes .pt-yes { background: rgba(79,142,247,0.12); color: var(--primary); border-radius: 20px 0 0 20px; }
+    .pill-toggle.yes .pt-no  { background: var(--surface); color: #9ca3af; }
+    /* NO active */
+    .pill-toggle.no  { border-color: var(--border); }
+    .pill-toggle.no  .pt-no  { background: var(--bg); color: var(--muted); border-radius: 0 20px 20px 0; }
+    .pill-toggle.no  .pt-yes { background: var(--surface); color: #9ca3af; }
+
+    /* ── Card sections (Contact / Basic info / Notes / Schedule) ── */
+    .card-section {
+      border-left: 2px solid var(--border);
+      padding-left: 12px;
+      margin-top: 14px;
+    }
+    .card-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 14px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text); margin-bottom: 10px;
+    }
+    .card-section-header > span:first-child,
+    .cs-label,
+    .notes-header-label {
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .card-section-body { }
+    .contact-phone-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .contact-phone-row .phone-num { font-size: 13px; color: var(--muted); font-family: inherit; }
+    .td-phone-desktop { display: none; }
+    .info-basic { display: flex; flex-direction: column; gap: 3px; }
+    .iv-date {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 14px; font-weight: 600; color: var(--text);
+      margin-bottom: 6px;
+    }
+    .iv-days-lbl {
+      font-size: 11px; font-weight: 600;
+      color: #5b8dee; letter-spacing: 0.02em;
+    }
+    .iv-parent-tag {
+      font-size: 13px; color: var(--muted); margin-bottom: 10px;
+    }
+    .iv-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+    /* ── Schedule modal — parent search ── */
+    .modal-parent-wrap { position: relative; margin-bottom: 0; }
+    .modal-parent-dd {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12); max-height: 200px; overflow-y: auto;
+    }
+    .mpdd-item { padding: 10px 14px; cursor: pointer; }
+    .mpdd-item:hover { background: var(--bg); }
+    .mpdd-item:not(:last-child) { border-bottom: 1px solid var(--border); }
+    .mpdd-name { font-size: 14px; font-weight: 700; color: var(--text); }
+    .mpdd-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .mpdd-empty { padding: 12px 14px; font-size: 13px; color: var(--muted); }
+    .modal-parent-chip {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 9px 12px; background: var(--bg); border-radius: 8px;
+      border: 1px solid var(--border); margin-top: 8px;
+    }
+    .mpchip-name { font-size: 14px; font-weight: 700; color: var(--text); }
+    .mpchip-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .mpchip-clear {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: 18px; line-height: 1; padding: 0 0 0 10px; flex-shrink: 0;
+    }
+    .btn-iv-wa { color: #25D366; border-color: rgba(37,211,102,0.3); }
+    .btn-iv-action {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: none; border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 10px;
+      font-size: 13px; font-weight: 400; color: var(--muted);
       cursor: pointer;
     }
-    .card-notes-header {
-      display: flex; align-items: center; gap: 5px;
-      padding: 5px 10px;
-      background: #e8edf5;
-      border-bottom: 1px solid #dde3ec;
-      font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.05em;
-      color: var(--muted);
+    .btn-iv-action:hover { background: var(--bg); color: var(--text); }
+    .iv-cal-blocked {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--muted); padding: 5px 8px;
+      background: var(--bg); border-radius: 6px; border: 1px solid var(--border);
+      pointer-events: none; opacity: 0.75;
     }
-    .card-notes-body {
-      background: #f2f5f9;
-      padding: 8px 10px;
+
+    /* Mobile-extra: subjects + location below classes */
+    .mobile-extra { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+    .me-row { font-size: 13px; color: var(--muted); display: flex; align-items: baseline; gap: 5px; }
+    .me-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--border); flex-shrink: 0; }
+
+    /* Flat basic-info rows (no container) */
+    .info-flat-rows { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; max-width: calc(100% - 64px); }
+    .info-flat-row {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; color: var(--muted); line-height: 1.3;
     }
-    .card-notes-box:hover .card-notes-header { background: #dde4ef; }
-    .card-notes-box:hover .card-notes-body   { background: #eaeff6; }
-    .notes-text {
+    .info-flat-row svg { flex-shrink: 0; color: var(--muted); opacity: 0.65; }
+
+    /* Expand button full-width tap area */
+    .btn-expand { margin-top: 8px; }
+
+    /* Detail row — block below the card, visually connected */
+    tr.detail-row        { display: none; }
+    tr.detail-row.open   { display: block; margin-top: -10px; }
+    tr.detail-row td {
       display: block;
-      white-space: pre-wrap;
-      color: var(--text);
-      font-size: 12px;
-      line-height: 1.5;
-      margin-bottom: 4px;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      padding: 14px;
+      background: #f8fafc;
+      cursor: default;
+    }
+
+    /* Detail grid — 2 col on mobile */
+    .detail-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    /* Notes — label above textarea */
+    .notes-row      { flex-direction: column; gap: 6px; }
+    .notes-label    { padding-top: 0; }
+    .notes-input    { font-size: 16px; /* prevent iOS zoom */ }
+
+    /* State message */
+    .state-msg { padding: 40px 16px; }
+
+    /* ── Inline notes ────────────────────────────────────────────────── */
+    .notes-actions { display: inline-flex; align-items: center; gap: 5px; }
+    .notes-action-sep { font-size: 10px; color: var(--border); }
+    .btn-notes-edit, .btn-notes-remove {
+      background: none; border: none; padding: 0;
+      font-size: 10px; text-decoration: underline;
+      text-underline-offset: 2px; cursor: pointer; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .btn-notes-edit { color: var(--primary); }
+    .btn-notes-remove { color: var(--muted); }
+    .btn-notes-remove:hover { color: #dc2626; }
+    .notes-edit-actions { display: inline-flex; gap: 6px; }
+    .notes-text {
+      display: block; white-space: pre-wrap;
+      color: var(--muted); font-size: 13px; line-height: 1.6;
     }
     .btn-inline-text {
       background: none; border: none; padding: 0;
-      font-size: 11px; color: #6366f1; text-decoration: underline;
+      font-size: 12px; color: var(--muted); text-decoration: underline;
       text-underline-offset: 2px; cursor: pointer;
     }
-    /* Empty state — just an underlined link, no box */
-    .btn-add-notes { font-size: 12px; }
     .card-notes-ta {
       width: 100%; box-sizing: border-box;
-      border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px; font-size: 13px; resize: vertical;
-      font-family: inherit; min-height: 64px;
-      outline: none;
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 10px; font-size: 13px; resize: none;
+      font-family: inherit; height: 100px; overflow-y: auto;
+      outline: none; background: var(--surface);
     }
-    .card-notes-ta:focus { border-color: #6366f1; }
-    .card-notes-actions {
-      display: flex; gap: 6px; margin-top: 6px;
-    }
+    .card-notes-ta:focus { border-color: var(--primary); outline: none; }
     .btn-notes-save {
-      background: #6366f1; color: white; border: none;
-      border-radius: 6px; padding: 4px 12px; font-size: 12px;
-      cursor: pointer; font-weight: 600;
+      background: var(--primary); color: white; border: none;
+      border-radius: 6px; padding: 3px 10px; font-size: 10px;
+      cursor: pointer; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .btn-notes-save:hover  { background: #4f46e5; }
+    .btn-notes-save:hover  { opacity: 0.85; }
     .btn-notes-save:disabled { opacity: 0.5; cursor: default; }
     .btn-notes-cancel {
       background: none; color: var(--muted); border: 1px solid var(--border);
-      border-radius: 6px; padding: 4px 10px; font-size: 12px;
-      cursor: pointer;
+      border-radius: 6px; padding: 3px 8px; font-size: 10px; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 0.05em;
     }
-    .btn-notes-cancel:hover { background: #f1f5f9; }
+    .btn-notes-cancel:hover { background: var(--bg); }
 
     /* ── Interview Status ── */
-    .card-interview { margin-top: 8px; }
+    .card-interview { }
 
     .iv-chip {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 10px; border-radius: 20px;
-      font-size: 11px; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 500;
+      border: 1px solid var(--border);
+      color: var(--muted); background: var(--bg);
     }
-    .iv-scheduled { background: #fef3c7; color: #92400e; }
-    .iv-cleared   { background: #dcfce7; color: #166534; }
-    .iv-rejected  { background: #fee2e2; color: #991b1b; }
+    .iv-scheduled { color: var(--text); border-color: var(--border); background: var(--surface); }
+    .iv-cleared   { color: var(--muted); }
+    .iv-rejected  { color: var(--muted); }
 
     .iv-past-alert {
-      background: #fff7ed;
-      border: 1px solid #fed7aa;
+      background: var(--bg);
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 10px;
       font-size: 12px;
     }
-    .iv-past-msg { display: block; color: #9a3412; font-weight: 500; margin-bottom: 6px; }
+    .iv-past-msg { display: block; color: var(--text); font-weight: 500; margin-bottom: 6px; }
     .iv-past-actions { display: flex; gap: 8px; }
     .btn-iv-result {
       padding: 4px 12px; border-radius: 6px; font-size: 12px;
       font-weight: 600; border: none; cursor: pointer;
     }
-    .btn-iv-result.yes { background: #dcfce7; color: #166534; }
-    .btn-iv-result.no  { background: #fee2e2; color: #991b1b; }
+    .btn-iv-result.yes { background: rgba(79,142,247,0.10); color: var(--primary); }
+    .btn-iv-result.no  { background: var(--bg); color: var(--muted); border-color: var(--border); }
 
     /* ── Schedule Modal ── */
     .modal-backdrop {
@@ -726,14 +881,20 @@
       box-shadow: 0 8px 32px rgba(0,0,0,0.18);
     }
     .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
-    .modal-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .status-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 3px; }
+    .badge-inloop { background: #E9F2FF; color: #0055CC; }
+    .badge-onboarded { background: #E3FCEF; color: #216E4E; }
+    .badge-hidden { display: none; }
+    .modal-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; margin-top: 16px; }
+    .modal-label:first-of-type { margin-top: 0; }
+    .field-error { font-size: 12px; color: #e53935; margin-top: 4px; margin-bottom: 0; }
     .modal-input {
       width: 100%; padding: 9px 12px; border: 1.5px solid var(--border);
       border-radius: 8px; font-size: 15px; font-family: inherit;
-      outline: none; box-sizing: border-box; margin-bottom: 20px;
+      outline: none; box-sizing: border-box; margin-bottom: 0;
     }
     .modal-input:focus { border-color: var(--primary); }
-    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .btn-modal-cancel {
       flex: 1; padding: 10px; border: 1.5px solid var(--border);
       border-radius: 8px; background: none; font-size: 14px;
@@ -747,15 +908,23 @@
     .btn-schedule-save:disabled { opacity: 0.55; cursor: default; }
     /* ── WA Share Modal ── */
     .wa-share-card { max-width: 340px; padding: 22px 20px 18px; }
+    .wa-modal-title { display: flex; align-items: center; gap: 8px; }
+    .wa-section-label {
+      display: block; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.09em; color: var(--muted); margin-bottom: 6px;
+    }
     .wa-date-chip {
       display: inline-block; font-size: 13px; font-weight: 600;
-      background: #fff3cd; color: #856404; border-radius: 20px;
-      padding: 4px 12px; margin-bottom: 18px;
+      background: var(--bg); color: var(--muted); border-radius: 20px;
+      border: 1px solid var(--border); padding: 4px 12px; margin-bottom: 18px;
     }
     .wa-section { margin-bottom: 4px; }
-    .wa-person-row {
-      font-size: 14px; font-weight: 500; color: var(--text);
-      margin: 4px 0 10px; min-height: 20px;
+    .wa-person-name {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      margin: 6px 0 4px;
+    }
+    .wa-visit-with {
+      font-size: 13px; color: var(--muted); margin-bottom: 10px;
     }
     .wa-search-wrap { position: relative; margin: 6px 0 8px; }
     .wa-search-input { margin: 0; font-size: 14px; }
@@ -769,11 +938,10 @@
       border-bottom: 1px solid #f0f2f8;
     }
     .wa-dd-item:last-child { border-bottom: none; }
-    .wa-dd-item:hover { background: #f5f7ff; }
+    .wa-dd-item:hover { background: var(--bg); }
     .wa-dd-name { font-size: 14px; font-weight: 500; color: var(--text); }
     .wa-dd-sub  { font-size: 12px; color: var(--muted); }
     .wa-dd-empty { padding: 10px 14px; font-size: 13px; color: var(--muted); }
-    .wa-selected-parent { color: var(--muted); font-size: 13px; }
     .btn-wa-send {
       display: flex; align-items: center; gap: 7px;
       width: 100%; padding: 10px 14px; border-radius: 8px;
@@ -785,48 +953,198 @@
     .btn-wa-send:disabled { background: #c8f0d8; color: #6fba8e; cursor: default; }
     .wa-divider { border: none; border-top: 1px solid #f0f2f8; margin: 16px 0; }
     .wa-close-btn { width: 100%; text-align: center; margin-top: 16px; }
+    .wa-msg-area {
+      width: 100%; box-sizing: border-box; display: block;
+      margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; font-size: 12px; font-family: inherit;
+      color: var(--text); resize: vertical; min-height: 88px;
+      line-height: 1.5; background: var(--bg); outline: none;
+    }
+    .wa-msg-area:focus { border-color: var(--primary); }
+    .wa-next-btn {
+      width: 100%; margin-top: 24px; background: none;
+      border: 1.5px solid var(--border); color: var(--muted);
+      border-radius: 10px; padding: 10px; font-size: 14px;
+      font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .wa-next-btn:hover { border-color: var(--primary); color: var(--primary); }
+    /* calendar prompt modal */
+    .cal-modal-heading {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 14px;
+    }
+    .cal-time-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500; color: var(--primary);
+      background: #eef2ff; border-radius: 8px; padding: 5px 10px; margin-bottom: 14px;
+    }
+    .cal-tutor-info { margin-bottom: 14px; }
+    .cal-tutor-name { font-size: 15px; font-weight: 700; color: var(--text); }
+    .cal-tutor-email { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .cal-desc-area {
+      width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 14px; font-family: inherit; line-height: 1.5;
+      outline: none; box-sizing: border-box; resize: vertical; min-height: 90px;
+      color: var(--text);
+    }
+    .cal-desc-area:focus { border-color: var(--primary); }
     /* confirm modal */
     .modal-card-sm { max-width: 300px; }
     .confirm-msg { font-size: 15px; color: var(--text); margin-bottom: 18px; line-height: 1.45; }
+    .confirm-sub { font-size: 12px; color: var(--muted); margin-top: 6px; display: block; }
     .btn-confirm-ok {
       flex: 1; padding: 10px 0; border-radius: 8px; font-size: 14px; font-weight: 600;
       background: #e53e3e; color: #fff; border: none; cursor: pointer;
     }
     .btn-confirm-ok:hover { background: #c53030; }
     /* inline cancel link */
-    .iv-actions { display: inline-flex; align-items: center; gap: 4px; }
-    .iv-sep { color: var(--muted); font-size: 12px; }
-    .btn-inline-danger { color: #e53e3e !important; }
+    .iv-actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .iv-sep { color: var(--border); font-size: 12px; }
+    .btn-inline-danger { color: var(--muted) !important; }
+    .btn-inline-danger:hover { color: #dc2626 !important; }
+    .btn-inline-wa     { color: #25D366 !important; }
     .btn-wa-inline {
       display: block; margin-top: 6px; background: none; border: none; padding: 0;
       font-size: 12px; font-weight: 500; color: #25D366;
       text-decoration: underline; cursor: pointer; text-align: left;
     }
 
-    /* ── Trash button ── */
-    .btn-card-trash {
-      display: inline-flex; align-items: center; gap: 4px;
-      margin-top: 10px; background: none; border: none; padding: 2px 4px;
-      font-size: 12px; color: var(--muted); cursor: pointer; border-radius: 4px;
-      opacity: 0.5; transition: opacity 0.15s, color 0.15s;
+    /* ── Card top-right actions (move + trash) ── */
+    .card-top-actions {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 16px; margin-bottom: 24px; align-self: flex-end;
     }
-    .btn-card-trash:hover { color: #e53e3e; opacity: 1; }
+    .btn-card-trash, .btn-card-move {
+      display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+      background: none; border: none; padding: 2px;
+      color: #6b7280; cursor: pointer; border-radius: 4px;
+    }
+    .card-action-label {
+      font-size: 11px; line-height: 1; color: var(--muted); font-weight: 500; letter-spacing: 0.02em;
+    }
+    .card-check-wrap {
+      display: inline-flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; padding: 2px;
+    }
+    .card-check-wrap:has(:checked) { opacity: 1; }
+
+    /* ── Move to tab bottom sheet ── */
+    .move-sheet {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 480px;
+      background: white; border-radius: 16px 16px 0 0;
+      padding: 20px 16px 32px; box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+      z-index: 101;
+    }
+    .move-sheet-title {
+      font-size: 17px; font-weight: 700; color: var(--text);
+      margin-bottom: 16px;
+    }
+    .btn-move-opt {
+      display: block; width: 100%; padding: 14px 16px; margin-bottom: 8px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      background: none; font-size: 15px; font-weight: 600; color: var(--text);
+      cursor: pointer; text-align: left;
+    }
+    .btn-move-opt:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-move-keep { color: var(--muted); border-color: var(--border); font-weight: 500; }
+    .btn-move-keep:hover { border-color: var(--muted); color: var(--text); }
+    .btn-move-danger { color: #dc2626; border-color: #dc2626; }
+    .btn-move-danger:hover { background: #fef2f2; }
+    .btn-move-cancel {
+      display: block; width: 100%; padding: 12px; margin-top: 4px;
+      border: none; background: none; font-size: 14px;
+      color: var(--muted); cursor: pointer; text-align: center;
+    }
+
+    /* ── Card checkbox ── */
+    /* .card-check-wrap moved to Card top-right actions block above */
+    .card-check-wrap input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+    .card-check-box {
+      width: 16px; height: 16px; border: 1.5px solid #9ca3af;
+      border-radius: 4px; background: white; flex-shrink: 0;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .card-check:checked + .card-check-box {
+      background: var(--primary); border-color: var(--primary);
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 10' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 5l3.5 3.5L11 1' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: center; background-size: 10px;
+    }
+    thead .card-check-box { opacity: 0.6; }
+
+    /* ── Bulk action bar ── */
+    .bulk-bar {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 12px;
+      background: var(--text); color: white;
+      padding: 12px 16px; border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      z-index: 200; max-width: calc(100vw - 32px);
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp { from { transform: translateX(-50%) translateY(16px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+    .bulk-count { font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .bulk-actions { display: flex; gap: 8px; }
+    .btn-bulk-action {
+      background: rgba(255,255,255,0.15); border: none; color: white;
+      font-size: 13px; font-weight: 600; padding: 6px 12px;
+      border-radius: 8px; cursor: pointer; white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .btn-bulk-action:hover { background: rgba(255,255,255,0.25); }
+    .btn-bulk-danger:hover { background: rgba(220,38,38,0.7); }
+    .btn-bulk-cancel {
+      background: none; border: none; color: rgba(255,255,255,0.6);
+      font-size: 13px; cursor: pointer; padding: 4px; white-space: nowrap;
+    }
+
+    /* ── Filter panel ── */
+    .btn-filter { position: relative; font-size: 12px; padding: 7px 12px; }
+    .btn-filter.has-filters::after {
+      content: ''; position: absolute; top: 4px; right: 4px;
+      width: 6px; height: 6px; background: var(--primary); border-radius: 50%;
+    }
+    .filter-panel {
+      margin: 6px 12px 0; padding: 14px; background: white;
+      border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .filter-section { margin-bottom: 14px; }
+    .filter-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px; }
+    .filter-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+    .filter-chip { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    .filter-chip input { position: absolute; opacity: 0; }
+    .filter-chip span {
+      display: inline-block; padding: 4px 10px; font-size: 12px; font-weight: 500;
+      border: 1.5px solid var(--border); border-radius: 20px; color: var(--muted);
+      transition: all 0.12s; background: white; user-select: none;
+    }
+    .filter-chip input:checked + span { background: var(--primary); border-color: var(--primary); color: white; }
+    .btn-filter-clear {
+      font-size: 12px; color: var(--muted); background: none; border: none;
+      cursor: pointer; padding: 4px 0; text-decoration: underline;
+    }
 
     /* ── Bin rows ── */
-    .bin-row td { padding: 14px 16px; }
-    .td-bin-info { width: 100%; }
+    tr.bin-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: white; border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px;
+      box-shadow: var(--shadow); margin-bottom: 10px; width: 100%; box-sizing: border-box;
+    }
+    .td-bin-info { flex: 1; min-width: 0; border: none; padding: 0; }
+    .td-bin-actions { border: none; padding: 0; flex-shrink: 0; }
     .bin-name { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
     .bin-meta { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
     .days-left { display: inline-block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
     .days-left.danger { color: #e53e3e; }
-    .td-bin-actions { white-space: nowrap; vertical-align: middle; }
     .btn-restore {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--primary);
       background: #fff; color: var(--primary); font-size: 13px; font-weight: 600;
-      cursor: pointer; white-space: nowrap;
+      cursor: pointer; white-space: nowrap; margin-left: 12px;
     }
-    .btn-restore:hover { background: #eef3fe; }
+    .btn-restore:hover { background: rgba(79,142,247,0.08); }
 
     /* ── Time Drum ── */
     .time-drum {
@@ -855,7 +1173,22 @@
       scrollbar-width: none; position: relative; z-index: 1;
     }
     .drum-col::-webkit-scrollbar { display: none; }
-    .drum-col-ampm { flex: 0 0 56px; }
+    .time-drum-row { display: flex; align-items: center; gap: 10px; }
+    .time-drum-row .time-drum { flex: 1; }
+    #drum-ampm {
+      display: flex; flex-direction: column;
+      justify-content: center; gap: 8px;
+      flex-shrink: 0;
+    }
+    .ampm-btn {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--muted);
+      cursor: pointer; text-align: center;
+    }
+    .ampm-btn.active {
+      background: rgba(79,142,247,0.12); color: var(--primary);
+      border-color: var(--primary);
+    }
     .drum-item {
       height: 48px; display: flex; align-items: center; justify-content: center;
       font-size: 20px; font-weight: 500; color: #1a1a2e;
@@ -894,8 +1227,8 @@
 <!-- ── SIGN-IN ──────────────────────────────────────────────────────────── -->
 <div id="signin-screen">
   <div class="signin-card">
-    <h1>📚 KidsBuddy</h1>
-    <p>Applications Dashboard · authorized team only</p>
+    <h1 style="display:flex;align-items:center;justify-content:center;gap:10px"><img src="app-icon.png" style="width:50px;height:50px;border-radius:8px">KidsBuddy CMS</h1>
+    <p>Client Management System · Authorized team only</p>
     <button class="google-btn" onclick="startSignIn()">
       <svg width="18" height="18" viewBox="0 0 48 48" style="display:block">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -911,7 +1244,7 @@
 <!-- ── DASHBOARD ────────────────────────────────────────────────────────── -->
 <div id="dashboard">
   <div class="topbar">
-    <span class="topbar-title">📚 KidsBuddy</span>
+    <span class="topbar-title" style="display:flex;align-items:center;gap:7px"><img src="app-icon.png" style="width:24px;height:24px;border-radius:6px">KidsBuddy CMS</span>
     <div class="topbar-right">
       <span id="user-email"></span>
       <button class="btn-signout" onclick="signOut()">Sign out</button>
@@ -936,11 +1269,11 @@
       </div>
       <div class="stat-card">
         <div class="stat-label">Contacted</div>
-        <div class="stat-value" id="stat-contacted" style="color:#22c55e">—</div>
+        <div class="stat-value" id="stat-contacted">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Not Contacted</div>
-        <div class="stat-value" id="stat-pending" style="color:#ef4444">—</div>
+        <div class="stat-value" id="stat-pending">—</div>
       </div>
     </div>
 
@@ -948,7 +1281,27 @@
       <input class="search-input" id="search"
         placeholder="Search name, phone, email, college…"
         oninput="applyFilters()">
-      <button class="btn" onclick="loadApplications()">↻ Refresh</button>
+      <div class="controls-row2">
+        <button id="btn-filter-toggle" class="btn btn-filter btn-ghost" onclick="toggleFilterPanel()">⚙ Filters</button>
+        <button class="btn btn-ghost" onclick="loadApplications()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div id="filter-panel" class="filter-panel" style="display:none">
+      <div class="filter-section">
+        <div class="filter-label">Location</div>
+        <div id="filter-location-opts" class="filter-opts"></div>
+      </div>
+      <div class="filter-section" id="filter-subj-section">
+        <div class="filter-label">Subjects</div>
+        <div id="filter-subj-opts" class="filter-opts">
+          <label class="filter-chip"><input type="checkbox" value="Maths" onchange="applyFilters()"><span>Maths</span></label>
+          <label class="filter-chip"><input type="checkbox" value="Science" onchange="applyFilters()"><span>Science</span></label>
+          <label class="filter-chip"><input type="checkbox" value="Social" onchange="applyFilters()"><span>Social</span></label>
+          <label class="filter-chip"><input type="checkbox" value="Other" onchange="applyFilters()"><span>Other</span></label>
+        </div>
+      </div>
+      <button class="btn-filter-clear" onclick="clearFilters()">Clear all filters</button>
     </div>
 
     <div class="result-count" id="result-count"></div>
@@ -957,6 +1310,7 @@
       <table>
         <thead>
           <tr>
+            <th><label class="card-check-wrap" style="margin:0"><input id="select-all-check" type="checkbox" class="card-check" onchange="handleSelectAll(this)"><span class="card-check-box"></span></label></th>
             <th>ID</th>
             <th>Name</th>
             <th>Phone</th>
@@ -978,36 +1332,40 @@
 <!-- WhatsApp Share Modal -->
 <div id="wa-share-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeWAShareModal()">
   <div class="modal-card wa-share-card" onclick="event.stopPropagation()">
-    <h3 class="modal-title">Share Schedule</h3>
+    <h3 class="modal-title wa-modal-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Share on WhatsApp
+    </h3>
     <div class="wa-date-chip" id="wa-date-chip"></div>
 
     <div class="wa-section">
-      <span class="modal-label">Tutor</span>
-      <div class="wa-person-row" id="wa-tutor-row"></div>
+      <div class="wa-person-name" id="wa-tutor-name"></div>
+      <div class="wa-visit-with" id="wa-visit-with" style="display:none"></div>
+      <textarea id="wa-tutor-msg" class="wa-msg-area" placeholder="Message to tutor…"></textarea>
       <button class="btn-wa-send" id="btn-send-tutor" onclick="sendWATo('tutor')">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-        Send to Tutor
+        To Tutor
       </button>
     </div>
 
     <div class="wa-divider"></div>
 
     <div class="wa-section">
-      <span class="modal-label">Parent</span>
-      <div class="wa-search-wrap">
+      <div class="wa-person-name" id="wa-parent-name" style="display:none"></div>
+      <div class="wa-search-wrap" id="wa-parent-search-wrap">
         <input id="wa-parent-search" class="modal-input wa-search-input" type="text"
                placeholder="Search parent or student name…"
                oninput="searchParentsForWA(this.value)" autocomplete="off">
         <div id="wa-parent-dropdown" class="wa-dropdown" style="display:none"></div>
       </div>
-      <div class="wa-person-row wa-selected-parent" id="wa-selected-parent" style="display:none"></div>
+      <textarea id="wa-parent-msg" class="wa-msg-area" placeholder="Message to parent…"></textarea>
       <button class="btn-wa-send" id="btn-send-parent" onclick="sendWATo('parent')" disabled>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-        Send to Parent
+        To Parent/Student
       </button>
     </div>
 
-    <button class="btn-modal-cancel wa-close-btn" onclick="closeWAShareModal()">Close</button>
+    <button class="wa-next-btn" onclick="closeWAShareModal()">Next ›</button>
   </div>
 </div>
 
@@ -1022,21 +1380,57 @@
   </div>
 </div>
 
+<!-- Move to Tab Modal -->
+<!-- Bulk Action Bar -->
+<div id="bulk-bar" class="bulk-bar" style="display:none">
+  <span id="bulk-count" class="bulk-count">0 selected</span>
+  <div class="bulk-actions">
+    <button class="btn-bulk-action" onclick="openBulkMoveModal()">Move to…</button>
+    <button class="btn-bulk-action btn-bulk-danger" onclick="bulkDelete()">Delete</button>
+  </div>
+  <button class="btn-bulk-cancel" onclick="clearSelection()">Cancel</button>
+</div>
+
+<div id="move-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeMoveModal()">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="move-sheet-title" id="move-sheet-title">Move to…</div>
+    <div id="move-options"></div>
+    <button class="btn-move-cancel" onclick="closeMoveModal()">Cancel</button>
+  </div>
+</div>
+
 <!-- Schedule Interview Modal -->
 <div id="schedule-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeScheduleModal()">
   <div class="modal-card" onclick="event.stopPropagation()">
     <h3 class="modal-title">Schedule a Visit</h3>
     <label class="modal-label" for="schedule-date-input">Date</label>
     <input id="schedule-date-input" type="text" class="modal-input" placeholder="Pick a date" readonly>
-    <label class="modal-label" style="margin-top:14px">Time</label>
-    <div class="time-drum" id="time-drum">
-      <div class="drum-fade-top"></div>
-      <div class="drum-fade-bot"></div>
-      <div class="drum-highlight"></div>
-      <div class="drum-col" id="drum-hour"></div>
-      <div class="drum-sep">:</div>
-      <div class="drum-col" id="drum-minute"></div>
-      <div class="drum-col drum-col-ampm" id="drum-ampm"></div>
+    <div id="schedule-date-err" class="field-error" style="display:none">Please pick a date.</div>
+    <label class="modal-label">Time</label>
+    <div class="time-drum-row">
+      <div class="time-drum" id="time-drum">
+        <div class="drum-fade-top"></div>
+        <div class="drum-fade-bot"></div>
+        <div class="drum-highlight"></div>
+        <div class="drum-col" id="drum-hour"></div>
+        <div class="drum-sep">:</div>
+        <div class="drum-col" id="drum-minute"></div>
+      </div>
+      <div id="drum-ampm"></div>
+    </div>
+    <label class="modal-label">Parent / Student</label>
+    <div class="modal-parent-wrap">
+      <input id="schedule-parent-input" type="text" class="modal-input" placeholder="Search parent name or number…"
+        oninput="searchModalParent(this.value)" autocomplete="off" style="margin-bottom:0">
+      <div id="schedule-parent-dropdown" class="modal-parent-dd" style="display:none"></div>
+      <div id="schedule-parent-err" class="field-error" style="display:none">Please select a parent / student.</div>
+      <div id="schedule-parent-chip" class="modal-parent-chip" style="display:none">
+        <div>
+          <div class="mpchip-name"></div>
+          <div class="mpchip-sub"></div>
+        </div>
+        <button class="mpchip-clear" onclick="clearModalParent()" title="Remove">×</button>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="closeScheduleModal()">Cancel</button>
@@ -1044,6 +1438,49 @@
     </div>
   </div>
 </div>
+
+<!-- Calendar Prompt Modal -->
+<div id="cal-prompt-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)closeCalendarPromptModal()">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="cal-modal-heading">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="4" width="20" height="18" rx="3" fill="#fff" stroke="#ddd" stroke-width="1.5"/>
+        <rect x="2" y="4" width="20" height="7" rx="3" fill="#4285F4"/>
+        <rect x="2" y="8" width="20" height="3" fill="#4285F4"/>
+        <line x1="8" y1="2" x2="8" y2="6" stroke="#4285F4" stroke-width="2" stroke-linecap="round"/>
+        <line x1="16" y1="2" x2="16" y2="6" stroke="#4285F4" stroke-width="2" stroke-linecap="round"/>
+        <text x="6.5" y="20" font-size="7.5" fill="#1a73e8" font-weight="700" font-family="sans-serif">31</text>
+      </svg>
+      Block in Google Calendar?
+    </div>
+
+    <div class="cal-time-chip" id="cp-time-chip"></div>
+
+    <div class="cal-tutor-info">
+      <div class="cal-tutor-name" id="cp-tutor-name"></div>
+      <div class="cal-tutor-email" id="cp-tutor-email"></div>
+    </div>
+
+    <label class="modal-label">Event name</label>
+    <input id="cp-event-name" class="modal-input" style="margin-bottom:10px" placeholder="Event title…">
+    <label class="modal-label">Event description</label>
+    <textarea id="cp-event-desc" class="cal-desc-area" placeholder="Add details…"></textarea>
+
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-modal-cancel" style="flex:1" onclick="closeCalendarPromptModal()">Skip</button>
+      <button class="btn-schedule-save" id="btn-cp-yes" style="flex:2" onclick="addCalendarFor('tutor')">Yes, Block</button>
+    </div>
+  </div>
+</div>
+
+<div id="page-loader">
+  <div class="app-loader">
+    <div class="app-loader-ring"></div>
+    <img src="app-icon.png" class="app-loader-icon" alt="">
+  </div>
+</div>
+
+<div id="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>

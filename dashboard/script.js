@@ -1,5 +1,8 @@
 // constants.js loaded before this file — CLIENT_ID, SPREADSHEET_ID, SHEETS, C, PAGE_SIZE, ALLOWED_EMAILS
 
+// ── DEV MODE ──────────────────────────────────────────────────────────────────
+const DEV_MODE = new URLSearchParams(location.search).has('dev');
+
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let tokenClient;
 let accessToken    = null;
@@ -9,25 +12,31 @@ let renderedCount  = 0;
 let scrollObserver = null;
 
 let currentSection = 'tutors';   // 'tutors' | 'parents'
-let currentTabKey  = 'applied';  // key into SECTION_TABS[currentSection]
+let currentTabKey  = 'all';      // key into SECTION_TABS[currentSection]
 let sheetIdMap      = {};         // sheet name → numeric sheetId (lazy-loaded)
 let _searchDebounce = null;
-let _parentCache    = [];         // cached parent rows for WA search
-let _waParentMatches = [];        // last search results (for selection by index)
-let _waShareData    = {};         // { tutorName, tutorPhone, tutorRow, dateStr, parentName, parentPhone, studentName }
+let _parentCache      = [];   // cached parent rows for WA search
+let _waParentMatches  = [];   // last WA search results (for selection by index)
+let _waShareData      = {};   // { tutorName, tutorPhone, tutorRow, dateStr, parentName, parentPhone, studentName }
+let _scheduleParent   = null; // { name, phone, studentName } selected in schedule modal
+let _scheduleParentMatches = []; // last schedule modal parent search results
+let _pendingCalData   = null; // set after scheduling; consumed by calendar prompt after WA modal closes
+
+// Bulk select
+let selectedUids = new Set();
 
 const SECTION_TABS = {
   tutors: [
-    { key: 'applied',    label: 'Applied',    sheet: SHEETS.TUTORS_APPLIED },
-    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.TUTORS_IN_LOOP },
-    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.TUTORS_ONBOARDED },
-    { key: 'bin',        label: 'Bin',        sheet: SHEETS.TUTORS_BIN,   isBin: true },
+    { key: 'all',        label: 'All',        sheet: SHEETS.TUTORS_APPLIED },
+    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.TUTORS_APPLIED,  statusFilter: 'In-Loop' },
+    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.TUTORS_APPLIED,  statusFilter: 'Onboarded' },
+    { key: 'bin',        label: 'Bin',        sheet: SHEETS.TUTORS_BIN,      isBin: true },
   ],
   parents: [
-    { key: 'to_contact', label: 'To-Contact', sheet: SHEETS.PARENTS_TO_CONTACT },
-    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.PARENTS_IN_LOOP },
-    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.PARENTS_ONBOARDED },
-    { key: 'bin',        label: 'Bin',        sheet: SHEETS.PARENTS_BIN, isBin: true },
+    { key: 'all',        label: 'All',        sheet: SHEETS.PARENTS_TO_CONTACT },
+    { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.PARENTS_TO_CONTACT, statusFilter: 'In-Loop' },
+    { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.PARENTS_TO_CONTACT, statusFilter: 'Onboarded' },
+    { key: 'bin',        label: 'Bin',        sheet: SHEETS.PARENTS_BIN,        isBin: true },
   ],
 };
 
@@ -38,7 +47,7 @@ function currentTabConfig() {
 
 function switchSection(section) {
   currentSection = section;
-  currentTabKey  = SECTION_TABS[section][0].key;
+  currentTabKey  = 'all';
   renderTabUI();
   loadApplications();
 }
@@ -60,6 +69,11 @@ function renderTabUI() {
     `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}"
       onclick="switchTab('${t.key}')">${t.label}</button>`
   ).join('');
+  // Search placeholder
+  const ph = currentSection === 'parents'
+    ? 'Search name, phone, location…'
+    : 'Search name, phone, email, college…';
+  document.getElementById('search').placeholder = ph;
 }
 
 // ── SESSION STORAGE ───────────────────────────────────────────────────────────
@@ -110,7 +124,8 @@ window.onload = () => {
       client_id: CLIENT_ID,
       scope: [
         'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/userinfo.email'
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/calendar.events'
       ].join(' '),
       callback: handleToken
     });
@@ -146,7 +161,7 @@ async function handleToken(resp) {
 
     if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
       accessToken = null;
-      showError('Access denied — this dashboard is for authorized team members only.');
+      showError('Access denied — this dashboard is for Authorized team members only.');
       return;
     }
 
@@ -169,15 +184,94 @@ function signOut() {
   document.getElementById('error-banner').style.display = 'none';
 }
 
+// ── MOCK DATA (DEV MODE) ──────────────────────────────────────────────────────
+function _mr(fields) {
+  const r = new Array(29).fill('');
+  Object.entries(fields).forEach(([k, v]) => { if (C[k] !== undefined) r[C[k]] = v; });
+  return r;
+}
+function _mp(fields) {
+  const r = new Array(18).fill('');
+  Object.entries(fields).forEach(([k, v]) => { if (CP[k] !== undefined) r[CP[k]] = v; });
+  return r;
+}
+const MOCK_TUTOR_ROWS = [
+  _mr({APP_ID:'KB-001',SUBMITTED:'29/09/2026 09:15:00',EMAIL:'rahul.sharma@gmail.com',NAME:'Rahul Sharma',PHONE:'9876543210',STUDENT:'Working',COLLEGE:'Tech Mahindra, Hyd',LOCATION:'Gachibowli',TRAVEL:'Bike',CLASSES:'0-5, 6-8',SUBJECTS:'Maths, Science (bio,chem,phy)',LANGUAGES:'English, Telugu',EXTRAS:'Computer basics',TIMINGS:'Between 5am to 10am',PAY:'500-1000',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'9:00-6:00',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:'',RATING:''}),
+  _mr({APP_ID:'KB-002',SUBMITTED:'28/09/2026 14:30:00',EMAIL:'priya.kumari@gmail.com',NAME:'Priya Kumari',PHONE:'8374644508',STUDENT:'Student',COLLEGE:'Osmania University',LOCATION:'Chaitanyapuri',TRAVEL:'Bus',CLASSES:'0-5, 6-8',SUBJECTS:'Maths, Science (bio,chem,phy)',LANGUAGES:'Hindi, English, Telugu',EXTRAS:'Communication skills, Computer basics',TIMINGS:'Between 5am to 10am',PAY:'400-800',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'9:00-4:00',CONTACTED:'Yes',NOTES:'Very enthusiastic, follow up this week',MAIL_SENT:'Yes',INTERVIEW_STATUS:'Scheduled',INTERVIEW_AT:'05/10/2026 11:00:00'}),
+  _mr({APP_ID:'KB-003',SUBMITTED:'27/09/2026 11:20:00',EMAIL:'arun.nair@gmail.com',NAME:'Arun Nair',PHONE:'9988776655',STUDENT:'Working',COLLEGE:'Infosys, Hyderabad',LOCATION:'HITEC City',TRAVEL:'Own vehicle',CLASSES:'6-8, 8-10',SUBJECTS:'Maths, Social',LANGUAGES:'English, Malayalam, Telugu',EXTRAS:'Abacus',TIMINGS:'Between 6pm to 9pm',PAY:'600-1200',REFERRAL:'Nikhil Kumar',OPEN:'No',WORKHOURS:'9:00-5:00',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-004',SUBMITTED:'26/09/2026 16:45:00',EMAIL:'sunita.reddy@gmail.com',NAME:'Sunita Reddy',PHONE:'7654321098',STUDENT:'Student',COLLEGE:'JNTU Hyderabad',LOCATION:'Kukatpally',TRAVEL:'Public transport',CLASSES:'0-5',SUBJECTS:'Science (bio,chem,phy), Social',LANGUAGES:'Telugu, English',EXTRAS:'Drawing, Craft',TIMINGS:'Between 4pm to 8pm',PAY:'300-600',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'',CONTACTED:'Yes',NOTES:'Prefers morning slots only',MAIL_SENT:'No',INTERVIEW_STATUS:'Cleared'}),
+  _mr({APP_ID:'KB-005',SUBMITTED:'25/09/2026 08:00:00',EMAIL:'vikram.patel@gmail.com',NAME:'Vikram Patel',PHONE:'9123456780',STUDENT:'Working',COLLEGE:'TCS, Hyderabad',LOCATION:'Secunderabad',TRAVEL:'Bike',CLASSES:'8-10, 10-12',SUBJECTS:'Maths',LANGUAGES:'Hindi, English, Marathi',EXTRAS:'Vedic Maths',TIMINGS:'Between 6am to 9am',PAY:'800-1500',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'9:30-6:30',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-006',SUBMITTED:'24/09/2026 13:10:00',EMAIL:'deepa.v@gmail.com',NAME:'Deepa V',PHONE:'8765432109',STUDENT:'Student',COLLEGE:'University of Hyderabad',LOCATION:'Gachibowli',TRAVEL:'Public transport',CLASSES:'0-5, 6-8',SUBJECTS:'Maths, Science (bio,chem,phy), Social',LANGUAGES:'Telugu, English, Kannada',EXTRAS:'Yoga, Music',TIMINGS:'Between 3pm to 7pm',PAY:'350-700',REFERRAL:'Priya Kumari',OPEN:'Yes',WORKHOURS:'',CONTACTED:'Yes',MAIL_SENT:'Yes',LAST_CALLED:'28/09/2026 10:30:00',INTERVIEW_STATUS:'Rejected'}),
+  _mr({APP_ID:'KB-007',SUBMITTED:'23/09/2026 10:55:00',EMAIL:'arjun.mehta@gmail.com',NAME:'Arjun Mehta',PHONE:'9012345678',STUDENT:'Working',COLLEGE:'Wipro, Hyderabad',LOCATION:'Madhapur',TRAVEL:'Own vehicle',CLASSES:'6-8, 8-10',SUBJECTS:'Maths, Science (bio,chem,phy)',LANGUAGES:'Hindi, English, Gujarati',EXTRAS:'Coding, Robotics',TIMINGS:'Between 7am to 10am',PAY:'700-1300',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'10:00-7:00',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-008',SUBMITTED:'22/09/2026 17:30:00',EMAIL:'ananya.singh@gmail.com',NAME:'Ananya Singh',PHONE:'8901234567',STUDENT:'Student',COLLEGE:'Hyderabad Central University',LOCATION:'Tarnaka',TRAVEL:'Bus',CLASSES:'0-5',SUBJECTS:'Science (bio,chem,phy), Social, Other',LANGUAGES:'Hindi, English, Bengali',EXTRAS:'Dance, Art',TIMINGS:'Between 4pm to 9pm',PAY:'300-500',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-009',SUBMITTED:'21/09/2026 09:45:00',EMAIL:'karthik.m@gmail.com',NAME:'Karthik M',PHONE:'7890123456',STUDENT:'Working',COLLEGE:'Accenture, Hyderabad',LOCATION:'Banjara Hills',TRAVEL:'Bike',CLASSES:'8-10, 10-12',SUBJECTS:'Maths, Science (bio,chem,phy)',LANGUAGES:'Tamil, English, Telugu',EXTRAS:'Chess, Rubiks cube',TIMINGS:'Between 5am to 9am',PAY:'900-1600',REFERRAL:'No',OPEN:'No',WORKHOURS:'9:00-6:00',CONTACTED:'Yes',NOTES:'Only available on weekends',MAIL_SENT:'Yes',LAST_CALLED:'25/09/2026 14:00:00',INTERVIEW_STATUS:'Scheduled',INTERVIEW_AT:'07/10/2026 09:00:00'}),
+  _mr({APP_ID:'KB-010',SUBMITTED:'20/09/2026 12:20:00',EMAIL:'divya.krishna@gmail.com',NAME:'Divya Krishna',PHONE:'6789012345',STUDENT:'Student',COLLEGE:'BITS Pilani (Hyd campus)',LOCATION:'Shameerpet',TRAVEL:'Own vehicle',CLASSES:'6-8, 8-10, 10-12',SUBJECTS:'Maths',LANGUAGES:'Telugu, English, Tamil',EXTRAS:'IIT coaching experience',TIMINGS:'Between 5pm to 9pm',PAY:'1000-2000',REFERRAL:'Karthik M',OPEN:'Yes',WORKHOURS:'',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-011',SUBMITTED:'19/09/2026 15:00:00',EMAIL:'rohit.jain@gmail.com',NAME:'Rohit Jain',PHONE:'5678901234',STUDENT:'Working',COLLEGE:'HCL Technologies',LOCATION:'Kondapur',TRAVEL:'Bike',CLASSES:'0-5, 6-8',SUBJECTS:'Maths, Other',LANGUAGES:'Hindi, English, Rajasthani',EXTRAS:'Abacus, Mental maths',TIMINGS:'Between 6am to 9am, 6pm to 9pm',PAY:'500-900',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'9:00-5:30',CONTACTED:'No',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+  _mr({APP_ID:'KB-012',SUBMITTED:'18/09/2026 07:30:00',EMAIL:'meera.nambiar@gmail.com',NAME:'Meera Nambiar',PHONE:'4567890123',STUDENT:'Student',COLLEGE:'St Francis College',LOCATION:'Begumpet',TRAVEL:'Public transport',CLASSES:'0-5',SUBJECTS:'Science (bio,chem,phy), Social',LANGUAGES:'Malayalam, English, Hindi',EXTRAS:'Story telling, Phonics',TIMINGS:'Between 3pm to 7pm',PAY:'250-500',REFERRAL:'No',OPEN:'Yes',WORKHOURS:'',CONTACTED:'Yes',MAIL_SENT:'No',INTERVIEW_STATUS:''}),
+];
+const MOCK_PARENT_ROWS = [
+  _mp({PARENT_ID:'P-001',ONBOARDED_ON:'29/09/2026 08:00:00',NAME:'Ramesh Gupta',PHONE:'9111222333',EMAIL:'ramesh.gupta@gmail.com',LOCATION:'Gachibowli',ADDRESS:'Flat 4B, Srinivas Apt, Gachibowli',STUDENT_NAME:'Riya Gupta',STUDENT_GRADE:'Grade 5',SUBJECTS_NEEDED:'Maths, Science (bio,chem,phy)',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'',MAILED:'No'}),
+  _mp({PARENT_ID:'P-002',ONBOARDED_ON:'28/09/2026 10:30:00',NAME:'Lakshmi Devi',PHONE:'9222333444',EMAIL:'lakshmi.devi@gmail.com',LOCATION:'Chaitanyapuri',ADDRESS:'House 12, MIG Colony, Chaitanyapuri',STUDENT_NAME:'Aditya Kumar',STUDENT_GRADE:'Grade 8',SUBJECTS_NEEDED:'Maths, Social',ASSIGNED_TUTOR:'Priya Kumari',LAST_CONTACTED:'29/09/2026 14:00:00',CONTACTED:'Yes',NOTES:'Prefers female tutor',MAILED:'Yes'}),
+  _mp({PARENT_ID:'P-003',ONBOARDED_ON:'27/09/2026 16:00:00',NAME:'Suresh Rao',PHONE:'9333444555',EMAIL:'suresh.rao@gmail.com',LOCATION:'HITEC City',ADDRESS:'102 Skyline Towers, HITEC City',STUDENT_NAME:'Pooja Rao',STUDENT_GRADE:'Grade 3',SUBJECTS_NEEDED:'Maths, Science (bio,chem,phy), Social',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'',MAILED:'No'}),
+  _mp({PARENT_ID:'P-004',ONBOARDED_ON:'26/09/2026 09:15:00',NAME:'Anjali Sharma',PHONE:'9444555666',EMAIL:'anjali.sharma@gmail.com',LOCATION:'Kukatpally',ADDRESS:'3-45, KPHB Phase 3, Kukatpally',STUDENT_NAME:'Dev Sharma',STUDENT_GRADE:'Grade 10',SUBJECTS_NEEDED:'Maths',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'Urgent — board exams in April',MAILED:'No'}),
+  _mp({PARENT_ID:'P-005',ONBOARDED_ON:'25/09/2026 11:45:00',NAME:'Venkat Reddy',PHONE:'9555666777',EMAIL:'venkat.reddy@gmail.com',LOCATION:'Banjara Hills',ADDRESS:'Plot 7, Road No 10, Banjara Hills',STUDENT_NAME:'Arjun Reddy',STUDENT_GRADE:'Grade 7',SUBJECTS_NEEDED:'Science (bio,chem,phy), Other',ASSIGNED_TUTOR:'Karthik M',LAST_CONTACTED:'27/09/2026 10:00:00',CONTACTED:'Yes',NOTES:'',MAILED:'Yes'}),
+  _mp({PARENT_ID:'P-006',ONBOARDED_ON:'24/09/2026 14:20:00',NAME:'Sujatha Iyer',PHONE:'9666777888',EMAIL:'sujatha.iyer@gmail.com',LOCATION:'Madhapur',ADDRESS:'Flat 201, Prestige Apts, Madhapur',STUDENT_NAME:'Kavya Iyer',STUDENT_GRADE:'Grade 6',SUBJECTS_NEEDED:'Maths, Social',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'',MAILED:'No'}),
+  _mp({PARENT_ID:'P-007',ONBOARDED_ON:'23/09/2026 07:30:00',NAME:'Praveen Kumar',PHONE:'9777888999',EMAIL:'praveen.k@gmail.com',LOCATION:'Secunderabad',ADDRESS:'HIG 34, Defence Colony, Secunderabad',STUDENT_NAME:'Manya Kumar',STUDENT_GRADE:'Grade 4',SUBJECTS_NEEDED:'Maths, Science (bio,chem,phy), Social',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'',MAILED:'No'}),
+  _mp({PARENT_ID:'P-008',ONBOARDED_ON:'22/09/2026 17:00:00',NAME:'Meghana Pillai',PHONE:'9888999000',EMAIL:'meghana.p@gmail.com',LOCATION:'Tarnaka',ADDRESS:'Flat 5C, Nakshatra Apts, Tarnaka',STUDENT_NAME:'Sai Pillai',STUDENT_GRADE:'Grade 9',SUBJECTS_NEEDED:'Maths, Other',ASSIGNED_TUTOR:'',CONTACTED:'No',NOTES:'Wants tutor with IIT experience',MAILED:'No'}),
+];
+
 // ── DATA ──────────────────────────────────────────────────────────────────────
+let _parentSheetOffset = 2;   // next sheet row to load (server-side pagination)
+let _parentHasMore     = true;
+let _parentLoading     = false;
+
 async function loadApplications() {
-  setTableMsg('Loading…');
+  document.getElementById('table-body').innerHTML = '';
+  showLoader();
   hideError();
+  clearSelection();
+
+  if (DEV_MODE) {
+    const dateCol = currentSection === 'parents' ? CP.ONBOARDED_ON : C.SUBMITTED;
+    allRows = currentSection === 'parents'
+      ? MOCK_PARENT_ROWS.map((r, i) => { const c = [...r]; c._sheetRow = i + 2; return c; })
+      : MOCK_TUTOR_ROWS.map((r, i) => { const c = [...r]; c._sheetRow = i + 2; return c; });
+    allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
+    populateFilterOptions();
+    applyFilters();
+    return;
+  }
 
   const config  = currentTabConfig();
-  const colEnd  = currentSection === 'parents' ? 'Q' : 'AB';
   const dateCol = currentSection === 'parents' ? CP.ONBOARDED_ON : C.SUBMITTED;
 
+  if (currentSection === 'parents') {
+    if (config.statusFilter) {
+      // Sub-tabs: full fetch filtered by STATUS (no pagination needed — small subset)
+      const colEnd = 'S';
+      try {
+        const range  = encodeURIComponent(`${config.sheet}!A2:${colEnd}`);
+        const result = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`);
+        allRows = (result.values || []).filter(r => r.length > 0 && (r[CP.STATUS] || '') === config.statusFilter);
+        allRows.forEach((row, i) => { row._sheetRow = i + 2; });
+        allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
+        populateFilterOptions();
+        applyFilters();
+      } catch (err) {
+        showError('Failed to load data: ' + err.message);
+        setTableMsg('Could not load.');
+      }
+    } else {
+      _parentSheetOffset = 2;
+      _parentHasMore     = true;
+      _parentLoading     = false;
+      allRows = [];
+      await _loadMoreParents(config, dateCol);
+    }
+    return;
+  }
+
+  const colEnd = 'AE';
   try {
     const range  = encodeURIComponent(`${config.sheet}!A2:${colEnd}`);
     const url    = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
@@ -185,7 +279,11 @@ async function loadApplications() {
 
     allRows = (result.values || []).filter(r => r.length > 0);
     allRows.forEach((row, i) => { row._sheetRow = i + 2; });
+    if (config.statusFilter) {
+      allRows = allRows.filter(r => (r[currentSection === 'tutors' ? C.STATUS : CP.STATUS] || '') === config.statusFilter);
+    }
     allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
+    populateFilterOptions();
     applyFilters();
   } catch (err) {
     showError('Failed to load data: ' + err.message);
@@ -193,22 +291,108 @@ async function loadApplications() {
   }
 }
 
+async function _loadMoreParents(config, dateCol) {
+  if (_parentLoading || !_parentHasMore) return;
+  _parentLoading = true;
+  const start  = _parentSheetOffset;
+  const end    = start + PAGE_SIZE - 1;
+  const colEnd = 'S'; // covers through ORIGINAL_TAB (col 17 = R) + 1 extra
+  try {
+    const range  = encodeURIComponent(`${config.sheet}!A${start}:${colEnd}${end}`);
+    const url    = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
+    const result = await apiFetch(url);
+    const newRows = (result.values || []).filter(r => r.length > 0);
+    newRows.forEach((row, i) => { row._sheetRow = start + i; });
+    allRows.push(...newRows);
+    _parentSheetOffset = start + PAGE_SIZE;
+    if (newRows.length < PAGE_SIZE) _parentHasMore = false;
+    if (allRows.length <= PAGE_SIZE) {
+      allRows.sort((a, b) => parseDate(cell(b, dateCol)) - parseDate(cell(a, dateCol)));
+      populateFilterOptions();
+      applyFilters();
+    } else {
+      renderTable(allRows);
+    }
+  } catch (err) {
+    showError('Failed to load parents: ' + err.message);
+    if (allRows.length === 0) setTableMsg('Could not load.');
+  } finally {
+    _parentLoading = false;
+  }
+}
+
 function applyFilters() {
   clearTimeout(_searchDebounce);
   _searchDebounce = setTimeout(_doFilter, 300);
 }
+
+function populateFilterOptions() {
+  const isTutor  = currentSection === 'tutors';
+  const locCol   = isTutor ? C.LOCATION : CP.LOCATION;
+  const wrap     = document.getElementById('filter-location-opts');
+  if (!wrap) return;
+  const locs = [...new Set(allRows.map(r => cell(r, locCol)).filter(Boolean))].sort();
+  wrap.innerHTML = locs.map(loc =>
+    `<label class="filter-chip"><input type="checkbox" value="${esc(loc)}" onchange="applyFilters()"><span>${esc(loc)}</span></label>`
+  ).join('');
+  // Show/hide subjects section based on section
+  const subjSec = document.getElementById('filter-subj-section');
+  if (subjSec) subjSec.style.display = isTutor ? '' : '';
+}
+
+function toggleFilterPanel() {
+  const panel = document.getElementById('filter-panel');
+  if (!panel) return;
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  document.getElementById('btn-filter-toggle')?.classList.toggle('active', !open);
+}
+
+function clearFilters() {
+  document.querySelectorAll('#filter-panel input[type="checkbox"]').forEach(c => c.checked = false);
+  applyFilters();
+}
+
+function _getActiveFilters() {
+  const locs  = [...document.querySelectorAll('#filter-location-opts input:checked')].map(i => i.value);
+  const subjs = [...document.querySelectorAll('#filter-subj-opts input:checked')].map(i => i.value);
+  return { locs, subjs };
+}
+
 function _doFilter() {
-  const q      = document.getElementById('search').value.toLowerCase().trim();
+  const q       = document.getElementById('search').value.toLowerCase().trim();
   const isTutor = currentSection === 'tutors';
+  const { locs, subjs } = _getActiveFilters();
 
   const searchCols = isTutor
     ? [C.NAME, C.PHONE, C.EMAIL, C.COLLEGE, C.APP_ID]
     : [CP.NAME, CP.PHONE, CP.EMAIL, CP.STUDENT_NAME, CP.LOCATION];
+  const locCol  = isTutor ? C.LOCATION  : CP.LOCATION;
+  const subjCol = isTutor ? C.SUBJECTS  : CP.SUBJECTS_NEEDED;
 
   const filtered = allRows.filter(r => {
-    if (!q) return true;
-    return searchCols.map(i => cell(r, i)).join(' ').toLowerCase().includes(q);
+    if (q && !searchCols.map(i => cell(r, i)).join(' ').toLowerCase().includes(q)) return false;
+    if (locs.length  && !locs.includes(cell(r, locCol))) return false;
+    if (subjs.length && !subjs.some(s => (cell(r, subjCol) || '').includes(s))) return false;
+    return true;
   });
+
+  // Sort In-Loop: scheduled first (earliest first), then rest by applied date
+  if (currentTabConfig().statusFilter === 'In-Loop' && currentSection === 'tutors') {
+    filtered.sort((a, b) => {
+      const aAt = cell(a, C.INTERVIEW_STATUS) === 'Scheduled' && cell(a, C.INTERVIEW_AT);
+      const bAt = cell(b, C.INTERVIEW_STATUS) === 'Scheduled' && cell(b, C.INTERVIEW_AT);
+      if (aAt && bAt) return parseDate(cell(a, C.INTERVIEW_AT)) - parseDate(cell(b, C.INTERVIEW_AT));
+      if (aAt) return -1;
+      if (bAt) return 1;
+      return parseDate(cell(a, C.SUBMITTED)) - parseDate(cell(b, C.SUBMITTED));
+    });
+  }
+
+  // Update filter chip visibility
+  const total = locs.length + subjs.length;
+  const filterToggle = document.getElementById('btn-filter-toggle');
+  if (filterToggle) filterToggle.classList.toggle('has-filters', total > 0);
 
   updateStats();
   renderTable(filtered);
@@ -231,16 +415,31 @@ function updateStats() {
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────────────
-const TRASH_SVG   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>`;
+const CALENDAR_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+const PENCIL_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`;
+const CLOSE_SVG   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+const SHARE_SVG   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+const TRASH_SVG   = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>`;
 const RESTORE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
 const NOTE_SVG  = `<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
 const WA_SVG   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
 const MAIL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>`;
 const CALL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>`;
+const GCAL_SVG    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>`;
+const CHEVRON_SVG = `<svg class="expand-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+const USER_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+const INFO_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
+const CLASSES_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
+const STUDENT_SVG  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+const MOVE_SVG     = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+const SUBJECTS_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
+const PIN_SVG      = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+const RUPEE_SVG    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`;
 
 function renderTable(filtered) {
   filteredRows  = filtered;
   renderedCount = 0;
+  hideLoader();
 
   if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
 
@@ -287,6 +486,10 @@ function appendRows() {
       : null;
 
     const submittedFmt = formatDate(cell(row, C.SUBMITTED));
+    const tutorStatus  = cell(row, C.STATUS) || '';
+    const statusBadgeHTML = tutorStatus
+      ? `<span class="status-badge badge-${tutorStatus === 'In-Loop' ? 'inloop' : 'onboarded'}" data-uid="${uid}">${esc(tutorStatus)}</span>`
+      : `<span class="status-badge badge-hidden" data-uid="${uid}"></span>`;
 
     const tr = document.createElement('tr');
     tr.className = 'data-row';
@@ -295,42 +498,58 @@ function appendRows() {
       <td class="td-id">${esc(cell(row, C.APP_ID))}</td>
       <td class="td-name">
         <span class="card-applied-at">${esc(submittedFmt)}</span>
+        ${statusBadgeHTML}
         ${esc(name)}
       </td>
-      <td class="td-phone">
+      <td class="td-phone td-phone-desktop">
         <span class="phone-num">${esc(phone)}</span>
         <span class="contact-icons">
-          ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow})" title="Call">${CALL_SVG}</a>` : ''}
+          ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow});handleCallTap(${sheetRow},'${uid}')" title="Call">${CALL_SVG}</a>` : ''}
           ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
           ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
         </span>
       </td>
       <td class="td-classes">
-        ${esc(cell(row, C.CLASSES))}
-        <div class="mobile-extra">
-          ${cell(row, C.SUBJECTS) ? `<span class="me-row">${esc(cell(row, C.SUBJECTS))}</span>` : ''}
-          ${cell(row, C.LOCATION) ? `<span class="me-row">${esc(cell(row, C.LOCATION))}</span>` : ''}
+        <div class="info-flat-rows">
+          ${cell(row, C.SUBJECTS) ? `<span class="info-flat-row">${SUBJECTS_SVG}${esc(cell(row, C.SUBJECTS))}</span>` : ''}
+          ${cell(row, C.CLASSES)  ? `<span class="info-flat-row">${CLASSES_SVG}${esc(cell(row, C.CLASSES))}</span>`  : ''}
+          ${cell(row, C.PAY)      ? `<span class="info-flat-row">${RUPEE_SVG}${esc(cell(row, C.PAY))}</span>`        : ''}
+          ${cell(row, C.LOCATION) ? `<span class="info-flat-row">${PIN_SVG}${esc(cell(row, C.LOCATION))}</span>` : ''}
         </div>
-        <div class="card-notes" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
-          ${notesInlineHTML(notes)}
+        <div class="card-section">
+          <div class="card-section-header"><span class="cs-label">${USER_SVG} Contact</span></div>
+          <div class="card-section-body">
+            <div class="contact-phone-row">
+              <span class="phone-num">${esc(phone)}</span>
+              <span class="contact-icons">
+                ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation();logCall(${sheetRow});handleCallTap(${sheetRow},'${uid}')" title="Call">${CALL_SVG}</a>` : ''}
+                ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
+                ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+              </span>
+            </div>
+            <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
+              data-sheet-row="${sheetRow}"
+              data-col="${C.CONTACTED + 1}"
+              data-current="${esc(contacted)}"
+              onclick="event.stopPropagation(); handleToggle(this)">
+<span class="pt-yes">Contacted</span>
+<span class="pt-no">Not yet</span>
+            </button>
+          </div>
         </div>
-        <div class="card-interview" data-sheet-row="${sheetRow}" data-iv-status="${esc(ivStatus)}" data-iv-at="${esc(ivAt)}">
+        <div class="card-interview card-section" data-sheet-row="${sheetRow}" data-iv-status="${esc(ivStatus)}" data-iv-at="${esc(ivAt)}">
           ${interviewStatusHTML(ivStatus, ivAt, sheetRow)}
         </div>
-        <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}</button>
+        <div class="card-notes card-section" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
+          ${notesInlineHTML(notes)}
+        </div>
       </td>
       <td class="td-date">${esc(submittedFmt)}</td>
       <td>
-        <div class="toggle-wrap">
-          <span class="toggle-label">Contacted</span>
-          <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
-            data-sheet-row="${sheetRow}"
-            data-col="${C.CONTACTED + 1}"
-            data-current="${esc(contacted)}"
-            onclick="event.stopPropagation(); handleToggle(this)">
-            <span class="pt-no">NO</span>
-            <span class="pt-yes">YES</span>
-          </button>
+        <div class="card-top-actions">
+          <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
+          <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
+          <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
       <td class="td-mail-sent">
@@ -344,10 +563,9 @@ function appendRows() {
       </td>
       <td class="td-expand">
         <button class="btn-expand" data-uid="${uid}" onclick="event.stopPropagation(); handleExpand(this)">
-          Full information <span class="expand-chevron"></span>
+          <span class="btn-expand-label">Show full information</span>${CHEVRON_SVG}
         </button>
       </td>`;
-    tr.onclick = () => toggleDetail(uid, tr);
     tbody.appendChild(tr);
 
     const dr = document.createElement('tr');
@@ -435,7 +653,7 @@ function appendParentRows() {
         <span class="card-applied-at">${esc(dateFmt)}</span>
         ${esc(name)}
       </td>
-      <td class="td-phone">
+      <td class="td-phone td-phone-desktop">
         <span class="phone-num">${esc(phone)}</span>
         <span class="contact-icons">
           ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
@@ -444,37 +662,50 @@ function appendParentRows() {
         </span>
       </td>
       <td class="td-classes">
-        ${student ? `<span class="me-row">${esc(student)}${grade ? ` · Grade ${esc(grade)}` : ''}</span>` : ''}
-        <div class="mobile-extra">
-          ${subjects ? `<span class="me-row">${esc(subjects)}</span>` : ''}
-          ${location ? `<span class="me-row">${esc(location)}</span>` : ''}
+        <div class="info-flat-rows">
+          ${subjects ? `<span class="info-flat-row">${SUBJECTS_SVG}${esc(subjects)}</span>` : ''}
+          ${student  ? `<span class="info-flat-row">${STUDENT_SVG}${esc(student)}${grade ? ` · Grade ${esc(grade)}` : ''}</span>` : ''}
+          ${location ? `<span class="info-flat-row">${PIN_SVG}${esc(location)}</span>` : ''}
         </div>
-        <div class="card-notes" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
+        <div class="card-section">
+          <div class="card-section-header"><span class="cs-label">${USER_SVG} Contact</span></div>
+          <div class="card-section-body">
+            <div class="contact-phone-row">
+              <span class="phone-num">${esc(phone)}</span>
+              <span class="contact-icons">
+                ${digits ? `<a class="icon-call" href="tel:${digits}" onclick="event.stopPropagation()" title="Call">${CALL_SVG}</a>` : ''}
+                ${waHref ? `<a class="icon-wa" href="${waHref}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="WhatsApp">${WA_SVG}</a>` : ''}
+                ${email  ? `<a class="icon-mail" href="mailto:${email}" onclick="event.stopPropagation()" title="Email">${MAIL_SVG}</a>` : ''}
+              </span>
+            </div>
+            <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
+              data-sheet-row="${sheetRow}"
+              data-col="${CP.CONTACTED + 1}"
+              data-current="${esc(contacted)}"
+              onclick="event.stopPropagation(); handleToggle(this)">
+<span class="pt-yes">Contacted</span>
+<span class="pt-no">Not yet</span>
+            </button>
+          </div>
+        </div>
+        <div class="card-notes card-section" data-sheet-row="${sheetRow}" data-notes="${esc(notes)}">
           ${notesInlineHTML(notes)}
         </div>
-        <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}</button>
       </td>
       <td class="td-date">${esc(dateFmt)}</td>
       <td>
-        <div class="toggle-wrap">
-          <span class="toggle-label">Contacted</span>
-          <button class="pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}"
-            data-sheet-row="${sheetRow}"
-            data-col="${CP.CONTACTED + 1}"
-            data-current="${esc(contacted)}"
-            onclick="event.stopPropagation(); handleToggle(this)">
-            <span class="pt-no">NO</span>
-            <span class="pt-yes">YES</span>
-          </button>
+        <div class="card-top-actions">
+          <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
+          <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
+          <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
       </td>
       <td class="td-mail-sent"></td>
       <td class="td-expand">
         <button class="btn-expand" data-uid="${uid}" onclick="event.stopPropagation(); handleExpand(this)">
-          Full information <span class="expand-chevron"></span>
+          <span class="btn-expand-label">Show full information</span>${CHEVRON_SVG}
         </button>
       </td>`;
-    tr.onclick = () => toggleDetail(uid, tr);
     tbody.appendChild(tr);
 
     const dr = document.createElement('tr');
@@ -507,7 +738,14 @@ function appendParentRows() {
 
     if (!scrollObserver) {
       scrollObserver = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting) appendParentRows();
+        if (!entries[0].isIntersecting) return;
+        if (renderedCount < filteredRows.length) {
+          appendParentRows();
+        } else if (currentSection === 'parents' && _parentHasMore && !DEV_MODE) {
+          const cfg     = currentTabConfig();
+          const dateCol = CP.ONBOARDED_ON;
+          _loadMoreParents(cfg, dateCol);
+        }
       }, { rootMargin: '300px' });
     }
     scrollObserver.observe(sentinel);
@@ -521,18 +759,91 @@ function df(label, value) {
   return `<div class="detail-field"><label>${label}</label><span>${esc(value || '—')}</span></div>`;
 }
 
-function toggleDetail(uid, tr) {
-  const dr   = document.getElementById(`detail-${uid}`);
-  const open = dr.classList.toggle('open');
-  tr.classList.toggle('expanded', open);
-  const chevron = tr.querySelector('.expand-chevron');
-  if (chevron) chevron.classList.toggle('up', open);
+let _openDetailUid = null;
+
+function _collapseDetail(uid, onDone) {
+  const dr  = document.getElementById(`detail-${uid}`);
+  const tr  = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+  const btn = tr?.querySelector('.btn-expand');
+  if (!dr || !dr.classList.contains('open')) { onDone?.(); return; }
+
+  const td = dr.querySelector('td');
+  td.style.maxHeight  = td.scrollHeight + 'px';
+  td.style.overflow   = 'hidden';
+  td.style.transition = 'max-height 0.28s ease';
+
+  requestAnimationFrame(() => {
+    td.style.maxHeight = '0';
+    tr?.classList.remove('expanded');
+    const icon = btn?.querySelector('.expand-icon');
+    if (icon) icon.style.transform = '';
+    const lbl = btn?.querySelector('.btn-expand-label');
+    if (lbl) lbl.textContent = 'Show full information';
+  });
+
+  const done = () => {
+    dr.classList.remove('open');
+    td.style.cssText = '';
+    dr.removeEventListener('transitionend', done);
+    onDone?.();
+  };
+  dr.addEventListener('transitionend', done);
+}
+
+function _expandDetail(uid) {
+  const dr  = document.getElementById(`detail-${uid}`);
+  const tr  = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+  const btn = tr?.querySelector('.btn-expand');
+  if (!dr || !tr) return;
+
+  dr.classList.add('open');
+  tr.classList.add('expanded');
+  const icon = btn?.querySelector('.expand-icon');
+  if (icon) icon.style.transform = 'rotate(180deg)';
+  const lbl = btn?.querySelector('.btn-expand-label');
+  if (lbl) lbl.textContent = 'Hide full information';
+
+  const td = dr.querySelector('td');
+  td.style.maxHeight  = '0';
+  td.style.overflow   = 'hidden';
+  td.style.transition = 'max-height 0.35s ease';
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    td.style.maxHeight = td.scrollHeight + 'px';
+  }));
+
+  const done = () => {
+    td.style.cssText = '';
+    dr.removeEventListener('transitionend', done);
+    // Scroll so card is ~60px from viewport top
+    const headerOffset = (document.querySelector('.tab-bar')?.getBoundingClientRect().bottom ?? 130) + 16;
+    const anchor = btn ?? dr;
+    const anchorTop = anchor.getBoundingClientRect().top + window.scrollY - headerOffset;
+    window.scrollTo({ top: anchorTop, behavior: 'smooth' });
+  };
+  dr.addEventListener('transitionend', done);
+  _openDetailUid = uid;
+}
+
+function toggleDetail(uid) {
+  if (_openDetailUid === uid) {
+    // Close the open one
+    _collapseDetail(uid);
+    _openDetailUid = null;
+    return;
+  }
+  if (_openDetailUid) {
+    // Collapse current, then open new
+    const prev = _openDetailUid;
+    _openDetailUid = null;
+    _collapseDetail(prev, () => _expandDetail(uid));
+  } else {
+    _expandDetail(uid);
+  }
 }
 
 function handleExpand(btn) {
-  const uid = btn.dataset.uid;
-  const tr  = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
-  toggleDetail(uid, tr);
+  toggleDetail(btn.dataset.uid);
 }
 
 // ── INLINE EDITS ──────────────────────────────────────────────────────────────
@@ -543,6 +854,7 @@ async function handleToggle(btn) {
   const next     = current === 'Yes' ? 'No' : 'Yes';
 
   btn.disabled = true;
+  showLoader();
   try {
     await updateCell(sheetRow, colNum, next);
     if (btn.classList.contains('pill-toggle')) {
@@ -558,12 +870,49 @@ async function handleToggle(btn) {
       if (currentSection === 'parents') {
         if (colNum === CP.CONTACTED + 1) allRows[ri][CP.CONTACTED] = next;
       } else {
-        if (colNum === C.CONTACTED + 1) allRows[ri][C.CONTACTED] = next;
+        if (colNum === C.CONTACTED + 1) {
+          allRows[ri][C.CONTACTED] = next;
+          const badge = btn.closest('tr.data-row')?.querySelector('.status-badge');
+          if (next === 'Yes' && !allRows[ri][C.STATUS]) {
+            allRows[ri][C.STATUS] = 'In-Loop';
+            if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
+            updateCell(sheetRow, C.STATUS + 1, 'In-Loop').catch(err => {
+              allRows[ri][C.STATUS] = '';
+              if (badge) { badge.textContent = ''; badge.className = 'status-badge badge-hidden'; }
+              showToast('Failed to update status: ' + err.message, 'error');
+            });
+          } else if (next === 'No' && allRows[ri][C.STATUS] === 'In-Loop') {
+            const rowEl = btn.closest('tr.data-row');
+            const uid2  = rowEl?.dataset.uid;
+            const tName = allRows[ri][C.NAME] || '';
+            allRows[ri][C.STATUS] = '';
+            if (badge) { badge.textContent = ''; badge.className = 'status-badge badge-hidden'; }
+            updateCell(sheetRow, C.STATUS + 1, '').then(() => {
+              const cfg2 = currentTabConfig();
+              if (cfg2.statusFilter === 'In-Loop' && uid2) {
+                const ri2 = allRows.findIndex(r => r._sheetRow === sheetRow);
+                if (ri2 !== -1) allRows.splice(ri2, 1);
+                rowEl?.remove();
+                document.querySelector(`tr.detail-row[data-uid="${uid2}"]`)?.remove();
+                updateStats();
+                const lbl = currentSection === 'parents' ? 'contacts' : 'applications';
+                document.getElementById('result-count').textContent = `${allRows.length} ${lbl}`;
+              }
+              showToast(`${tName} taken out of In-Loop`);
+            }).catch(err => {
+              allRows[ri][C.STATUS] = 'In-Loop';
+              if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
+              showToast('Failed to update status: ' + err.message, 'error');
+            });
+          }
+        }
         if (colNum === C.MAIL_SENT + 1) allRows[ri][C.MAIL_SENT] = next;
       }
     }
     updateStats();
+    hideLoader();
   } catch (err) {
+    hideLoader();
     showError('Update failed: ' + err.message);
   }
   btn.disabled = false;
@@ -571,33 +920,58 @@ async function handleToggle(btn) {
 
 // ── INLINE NOTES ─────────────────────────────────────────────────────────────
 function notesInlineHTML(notes) {
-  if (notes) {
-    return `<div class="card-notes-box" onclick="event.stopPropagation();openCardNotes(this.closest('.card-notes'))">
-      <div class="card-notes-header">${NOTE_SVG}<span>Notes</span></div>
-      <div class="card-notes-body">
-        <span class="notes-text">${esc(notes)}</span>
-        <button class="btn-inline-text">Edit notes</button>
-      </div>
+  return `
+    <div class="card-section-header">
+      <span class="notes-header-label">${NOTE_SVG} Notes</span>
+      ${notes ? `<span class="notes-actions">
+        <button class="btn-notes-remove" onclick="event.stopPropagation();removeCardNotes(this.closest('.card-notes'))">Remove</button>
+        <span class="notes-action-sep">|</span>
+        <button class="btn-notes-edit" onclick="event.stopPropagation();openCardNotes(this.closest('.card-notes'))">Edit</button>
+      </span>` : ''}
+    </div>
+    <div class="card-notes-body card-section-body">
+      ${notes
+        ? `<span class="notes-text">${esc(notes)}</span>`
+        : `<button class="btn-inline-text btn-add-notes" onclick="event.stopPropagation();openCardNotes(this.closest('.card-notes'))">+ Add notes</button>`
+      }
     </div>`;
-  }
-  return `<button class="btn-inline-text btn-add-notes" onclick="event.stopPropagation();openCardNotes(this.closest('.card-notes'))">✏ Add notes</button>`;
 }
 
 function openCardNotes(container) {
   const current = container.dataset.notes || '';
-  container.innerHTML = `
-    <textarea class="card-notes-ta" onclick="event.stopPropagation()"
-      onkeydown="if(event.key==='Escape'){event.stopPropagation();cancelCardNotes(this.closest('.card-notes'))}"
-    >${esc(current)}</textarea>
-    <div class="card-notes-actions">
-      <button class="btn-notes-save"   onclick="event.stopPropagation();saveCardNotes(this.closest('.card-notes'))">Save</button>
+  container.querySelector('.card-section-header').innerHTML = `
+    <span class="notes-header-label">${NOTE_SVG} Notes</span>
+    <div class="notes-edit-actions">
       <button class="btn-notes-cancel" onclick="event.stopPropagation();cancelCardNotes(this.closest('.card-notes'))">Cancel</button>
+      <button class="btn-notes-save"   onclick="event.stopPropagation();saveCardNotes(this.closest('.card-notes'))">Save</button>
     </div>`;
-  container.querySelector('.card-notes-ta').focus();
+  const body = container.querySelector('.card-notes-body');
+  body.innerHTML = `<textarea class="card-notes-ta" onclick="event.stopPropagation()"
+    onkeydown="if(event.key==='Escape'){event.stopPropagation();cancelCardNotes(this.closest('.card-notes'))}"
+  >${esc(current)}</textarea>`;
+  body.querySelector('.card-notes-ta').focus();
 }
 
 function cancelCardNotes(container) {
   container.innerHTML = notesInlineHTML(container.dataset.notes || '');
+}
+
+function removeCardNotes(container) {
+  showConfirm('Remove this note?<br><span class="confirm-sub">This cannot be undone.</span>', async () => {
+    const sheetRow = parseInt(container.dataset.sheetRow);
+    showLoader();
+    try {
+      await updateCell(sheetRow, C.NOTES + 1, '');
+      const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+      if (ri !== -1) allRows[ri][C.NOTES] = '';
+      container.dataset.notes = '';
+      container.innerHTML = notesInlineHTML('');
+      hideLoader();
+    } catch (err) {
+      hideLoader();
+      showError('Notes remove failed: ' + err.message);
+    }
+  });
 }
 
 async function saveCardNotes(container) {
@@ -605,13 +979,16 @@ async function saveCardNotes(container) {
   const value    = container.querySelector('.card-notes-ta').value.trim();
 
   container.querySelector('.btn-notes-save').disabled = true;
+  showLoader();
   try {
     await updateCell(sheetRow, C.NOTES + 1, value);
     const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
     if (ri !== -1) allRows[ri][C.NOTES] = value;
     container.dataset.notes = value;
     container.innerHTML = notesInlineHTML(value);
+    hideLoader();
   } catch (err) {
+    hideLoader();
     showError('Notes save failed: ' + err.message);
     cancelCardNotes(container);
   }
@@ -620,15 +997,40 @@ async function saveCardNotes(container) {
 // ── INTERVIEW STATUS ──────────────────────────────────────────────────────────
 function interviewStatusHTML(status, scheduledAt, sheetRow) {
   if (status === 'Cleared') {
-    return `<span class="iv-chip iv-cleared">✓ Interview Cleared</span>`;
+    return `
+      <div class="card-section-header"><span class="cs-label">${CALENDAR_SVG} Schedule</span></div>
+      <div class="card-section-body"><span class="iv-chip iv-cleared">Interview Cleared</span></div>`;
   }
   if (status === 'Rejected') {
-    return `<span class="iv-chip iv-rejected">✕ Interview Rejected</span>`;
+    return `
+      <div class="card-section-header"><span class="cs-label">${CALENDAR_SVG} Schedule</span></div>
+      <div class="card-section-body"><span class="iv-chip iv-rejected">Interview Rejected</span></div>`;
   }
   if (status === 'Scheduled' && scheduledAt) {
     const d       = parseDate(scheduledAt);
     const isPast  = d < new Date();
     const dateLbl = formatDate(scheduledAt);
+    const _now    = new Date(); _now.setHours(0,0,0,0);
+    const _day    = new Date(d); _day.setHours(0,0,0,0);
+    const _diff   = Math.round((_day - _now) / 86400000);
+    const daysLbl = _diff <= 0 ? '' : _diff === 1 ? 'Tomorrow' : `in ${_diff} days`;
+    // Read parent data from allRows
+    let parentData = null;
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) {
+      const raw = (allRows[ri][C.SCHEDULED_PARENT] || '').trim();
+      if (raw) {
+        const [pName, pPhone, pStudent] = raw.split('|');
+        if (pName) parentData = { name: pName, phone: pPhone || '', studentName: pStudent || '' };
+      }
+    }
+    const parentLine = parentData
+      ? `<div class="iv-parent-tag">With ${esc(parentData.name)}${parentData.studentName ? ' &amp; ' + esc(parentData.studentName) : ''} · ${esc(parentData.phone)}</div>`
+      : '';
+    const calId = ri !== -1 ? (allRows[ri][C.CALENDAR_EVENT_ID] || '').trim() : '';
+    const calBtn = calId
+      ? `<span class="iv-cal-blocked">${GCAL_SVG} Blocked in Calendar</span>`
+      : `<button class="btn-iv-action" onclick="event.stopPropagation();openCalendarPromptFromCard(${sheetRow})">${GCAL_SVG} Block Calendar</button>`;
     if (isPast) {
       return `
         <div class="iv-past-alert">
@@ -640,15 +1042,23 @@ function interviewStatusHTML(status, scheduledAt, sheetRow) {
         </div>`;
     }
     return `
-      <span class="iv-chip iv-scheduled">📅 ${esc(dateLbl)}</span>
-      <span class="iv-actions">
-        <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">Change</button>
-        <span class="iv-sep">|</span>
-        <button class="btn-inline-text btn-inline-danger" onclick="event.stopPropagation();confirmCancelSchedule(${sheetRow})">Cancel</button>
-      </span>
-      <button class="btn-wa-inline" onclick="event.stopPropagation();openWAShareFromCard(${sheetRow})">Share Schedule on WhatsApp</button>`;
+      <div class="card-section-header"><span class="cs-label">${CALENDAR_SVG} Schedule</span></div>
+      <div class="card-section-body">
+        <div class="iv-date"><span>${esc(dateLbl)}</span>${daysLbl ? `<span class="iv-days-lbl">${daysLbl}</span>` : ''}</div>
+        ${parentLine}
+        <div class="iv-actions">
+          <button class="btn-iv-action" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'${esc(scheduledAt)}')">${PENCIL_SVG} Change</button>
+          <button class="btn-iv-action" onclick="event.stopPropagation();confirmCancelSchedule(${sheetRow})">${CLOSE_SVG} Cancel</button>
+          <button class="btn-iv-action btn-iv-wa" onclick="event.stopPropagation();openWAShareFromCard(${sheetRow})">${WA_SVG} Share</button>
+          ${calBtn}
+        </div>
+      </div>`;
   }
-  return `<button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">Schedule a Visit</button>`;
+  return `
+    <div class="card-section-header"><span class="cs-label">${CALENDAR_SVG} Schedule</span></div>
+    <div class="card-section-body">
+      <button class="btn-inline-text" onclick="event.stopPropagation();openScheduleModal(${sheetRow},'')">+ Schedule a Visit</button>
+    </div>`;
 }
 
 let _schedulePicker = null;
@@ -676,7 +1086,14 @@ function initTimeDrum(defHour, defMin, defAmpm) {
 
   buildCol('drum-hour',   hours,   defHour - 1);
   buildCol('drum-minute', minutes, defMin);
-  buildCol('drum-ampm',   ['AM','PM'], defAmpm === 'PM' ? 1 : 0);
+
+  // AM/PM: simple tap toggle instead of drum (binary choice, no scroll needed)
+  const ampmEl = document.getElementById('drum-ampm');
+  ampmEl.innerHTML = `
+    <button class="ampm-btn${defAmpm !== 'PM' ? ' active' : ''}" data-val="AM"
+      onclick="this.classList.add('active');this.nextElementSibling.classList.remove('active')">AM</button>
+    <button class="ampm-btn${defAmpm === 'PM' ? ' active' : ''}" data-val="PM"
+      onclick="this.classList.add('active');this.previousElementSibling.classList.remove('active')">PM</button>`;
 }
 
 function getDrumTime() {
@@ -688,7 +1105,8 @@ function getDrumTime() {
   }
   const h  = readIdx('drum-hour',   12) + 1;  // 1–12
   const m  = readIdx('drum-minute', 60);       // 0–59
-  const ap = readIdx('drum-ampm',   2) === 1 ? 'PM' : 'AM';
+  const activeAmpm = document.querySelector('#drum-ampm .ampm-btn.active');
+  const ap = activeAmpm ? activeAmpm.dataset.val : 'AM';
   return { h, m, ap };
 }
 
@@ -702,6 +1120,7 @@ function openScheduleModal(sheetRow, current) {
     minDate: 'today',
     defaultDate: current ? parseDate(current) : null,
     disableMobile: true,
+    static: true,
   });
 
   let dh = 9, dm = 0, dap = 'AM';
@@ -712,9 +1131,26 @@ function openScheduleModal(sheetRow, current) {
     dh  = raw % 12 || 12;
     dm  = d.getMinutes();
   }
+
+  // Init parent field — pre-fill if already assigned
+  _scheduleParent = null;
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri !== -1) {
+    const raw = (allRows[ri][C.SCHEDULED_PARENT] || '').trim();
+    if (raw) {
+      const [pName, pPhone, pStudent] = raw.split('|');
+      _scheduleParent = { name: pName || '', phone: pPhone || '', studentName: pStudent || '' };
+    }
+  }
+  _renderModalParent();
+  document.getElementById('schedule-parent-input').value = '';
+  document.getElementById('schedule-parent-dropdown').style.display = 'none';
+
+  document.getElementById('schedule-date-err').style.display   = 'none';
+  document.getElementById('schedule-parent-err').style.display = 'none';
   modal.style.display = 'flex';
-  // defer until modal is visible so scrollTop assignment takes effect
   requestAnimationFrame(() => initTimeDrum(dh, dm, dap));
+  ensureParentCache();
 }
 
 function closeScheduleModal() {
@@ -722,9 +1158,56 @@ function closeScheduleModal() {
   if (_schedulePicker) { _schedulePicker.destroy(); _schedulePicker = null; }
 }
 
+function _renderModalParent() {
+  const chip = document.getElementById('schedule-parent-chip');
+  if (_scheduleParent) {
+    chip.style.display = 'flex';
+    chip.querySelector('.mpchip-name').textContent = _scheduleParent.name;
+    chip.querySelector('.mpchip-sub').textContent =
+      (_scheduleParent.studentName ? '& ' + _scheduleParent.studentName + ' · ' : '') + (_scheduleParent.phone || '');
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+function searchModalParent(q) {
+  const dd = document.getElementById('schedule-parent-dropdown');
+  if (!q.trim()) { dd.innerHTML = ''; dd.style.display = 'none'; return; }
+  ensureParentCache().then(() => {
+    _scheduleParentMatches = _parentCache.filter(r =>
+      [cell(r, CP.NAME), cell(r, CP.PHONE), cell(r, CP.STUDENT_NAME)]
+        .join(' ').toLowerCase().includes(q.toLowerCase())
+    ).slice(0, 6);
+    if (!_scheduleParentMatches.length) {
+      dd.innerHTML = `<div class="mpdd-empty">No parents found</div>`;
+    } else {
+      dd.innerHTML = _scheduleParentMatches.map((r, i) => `
+        <div class="mpdd-item" onclick="selectModalParent(${i})">
+          <div class="mpdd-name">${esc(cell(r, CP.NAME))}</div>
+          <div class="mpdd-sub">${cell(r, CP.PHONE) ? esc(cell(r, CP.PHONE)) : ''}${cell(r, CP.STUDENT_NAME) ? ' · ' + esc(cell(r, CP.STUDENT_NAME)) : ''}</div>
+        </div>`).join('');
+    }
+    dd.style.display = 'block';
+  });
+}
+
+function selectModalParent(idx) {
+  const r = _scheduleParentMatches[idx];
+  if (!r) return;
+  _scheduleParent = { name: cell(r, CP.NAME), phone: cell(r, CP.PHONE), studentName: cell(r, CP.STUDENT_NAME) };
+  document.getElementById('schedule-parent-input').value = '';
+  document.getElementById('schedule-parent-dropdown').style.display = 'none';
+  _renderModalParent();
+}
+
+function clearModalParent() {
+  _scheduleParent = null;
+  _renderModalParent();
+}
+
 function showConfirm(message, onOk) {
   const modal = document.getElementById('confirm-modal');
-  document.getElementById('confirm-msg').textContent = message;
+  document.getElementById('confirm-msg').innerHTML = message;
   const btn = document.getElementById('confirm-ok-btn');
   btn.onclick = () => { closeConfirmModal(); onOk(); };
   modal.style.display = 'flex';
@@ -735,21 +1218,38 @@ function closeConfirmModal() {
 
 async function confirmCancelSchedule(sheetRow) {
   showConfirm('Cancel this scheduled visit?', async () => {
+    showLoader();
     try {
-      await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, '');
-      await updateCell(sheetRow, C.INTERVIEW_AT     + 1, '');
-      const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+      const ri    = allRows.findIndex(r => r._sheetRow === sheetRow);
+      const calId = ri !== -1 ? (allRows[ri][C.CALENDAR_EVENT_ID] || '').trim() : '';
+
+      await updateCell(sheetRow, C.INTERVIEW_STATUS    + 1, '');
+      await updateCell(sheetRow, C.INTERVIEW_AT        + 1, '');
+      await updateCell(sheetRow, C.SCHEDULED_PARENT    + 1, '');
+      await updateCell(sheetRow, C.CALENDAR_EVENT_ID   + 1, '');
+
       if (ri !== -1) {
-        allRows[ri][C.INTERVIEW_STATUS] = '';
-        allRows[ri][C.INTERVIEW_AT]     = '';
+        allRows[ri][C.INTERVIEW_STATUS]  = '';
+        allRows[ri][C.INTERVIEW_AT]      = '';
+        allRows[ri][C.SCHEDULED_PARENT]  = '';
+        allRows[ri][C.CALENDAR_EVENT_ID] = '';
       }
+
+      // Delete calendar event (fire-and-forget — don't block on failure)
+      if (calId) {
+        _deleteCalendarEvent(calId)
+          .catch(err => console.warn('[Calendar delete]', err.message));
+      }
+
       const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
       if (container) {
         container.dataset.ivStatus = '';
         container.dataset.ivAt     = '';
         container.innerHTML = interviewStatusHTML('', '', sheetRow);
       }
+      hideLoader();
     } catch (err) {
+      hideLoader();
       showError('Failed to cancel visit: ' + err.message);
     }
   });
@@ -765,18 +1265,39 @@ async function ensureParentCache() {
   } catch { _parentCache = []; }
 }
 
-function openWAShareModal(tutorName, tutorPhone, dateStr) {
-  _waShareData = { tutorName, tutorPhone, dateStr, parentName: '', parentPhone: '', studentName: '' };
+function openWAShareModal(tutorName, tutorPhone, dateStr, parentName = '', parentPhone = '', studentName = '') {
+  _waShareData = { tutorName, tutorPhone, dateStr, parentName, parentPhone, studentName };
   _waParentMatches = [];
 
-  document.getElementById('wa-date-chip').textContent    = '📅 ' + formatDate(dateStr);
-  document.getElementById('wa-tutor-row').textContent    = tutorName + (tutorPhone ? ' · ' + tutorPhone : '');
-  document.getElementById('wa-parent-search').value      = '';
-  document.getElementById('wa-parent-dropdown').style.display = 'none';
-  document.getElementById('wa-selected-parent').style.display = 'none';
-  document.getElementById('btn-send-parent').disabled    = true;
+  document.getElementById('wa-date-chip').textContent = '📅 ' + formatDate(dateStr);
+  document.getElementById('wa-tutor-name').textContent = tutorName + (tutorPhone ? ' · ' + tutorPhone : '');
+
+  const visitWith = document.getElementById('wa-visit-with');
+  if (parentName) {
+    visitWith.textContent = 'Visit with — ' + parentName + (studentName ? ' & ' + studentName : '');
+    visitWith.style.display = 'block';
+  } else {
+    visitWith.style.display = 'none';
+  }
+
+  const parentNameEl = document.getElementById('wa-parent-name');
+  const searchWrap   = document.getElementById('wa-parent-search-wrap');
+  if (parentName) {
+    parentNameEl.textContent = parentName + (studentName ? ' · ' + studentName : '') + (parentPhone ? ' · ' + parentPhone : '');
+    parentNameEl.style.display = 'block';
+    searchWrap.style.display = 'none';
+    document.getElementById('btn-send-parent').disabled = false;
+  } else {
+    parentNameEl.style.display = 'none';
+    searchWrap.style.display = 'block';
+    document.getElementById('wa-parent-search').value = '';
+    document.getElementById('wa-parent-dropdown').style.display = 'none';
+    document.getElementById('btn-send-parent').disabled = true;
+  }
 
   document.getElementById('wa-share-modal').style.display = 'flex';
+  document.getElementById('wa-tutor-msg').value = buildWAMessage('tutor');
+  document.getElementById('wa-parent-msg').value = parentName ? buildWAMessage('parent') : '';
   ensureParentCache();
 }
 
@@ -787,11 +1308,196 @@ function openWAShareFromCard(sheetRow) {
   const name    = cell(row, C.NAME);
   const phone   = cell(row, C.PHONE);
   const dateStr = cell(row, C.INTERVIEW_AT);
-  openWAShareModal(name, phone, dateStr);
+  const raw     = (row[C.SCHEDULED_PARENT] || '').trim();
+
+  if (!raw) {
+    // 2-step: no parent assigned — re-open schedule modal so user can add one
+    showError('No parent assigned. Open the schedule to add a parent first, then share.');
+    openScheduleModal(sheetRow, dateStr);
+    return;
+  }
+
+  const [pName, pPhone, pStudent] = raw.split('|');
+  openWAShareModal(name, phone, dateStr, pName || '', pPhone || '', pStudent || '');
 }
 
 function closeWAShareModal() {
   document.getElementById('wa-share-modal').style.display = 'none';
+  if (_pendingCalData) {
+    const d = _pendingCalData;
+    _pendingCalData = null;
+    openCalendarPromptModal(d);
+  }
+}
+
+function openCalendarPromptModal(d) {
+  // Timing chip: "30 Sep 2026 · 9:00 AM – 10:00 AM"
+  const start = parseDate(d.dateStr);
+  const end   = new Date(start.getTime() + 60 * 60 * 1000);
+  document.getElementById('cp-time-chip').textContent =
+    `${formatDate(d.dateStr).replace(/:00$/, '')} – ${formatTime(end)}`;
+
+  document.getElementById('cp-tutor-name').textContent  = d.tutorName;
+  document.getElementById('cp-tutor-email').textContent = d.tutorEmail || '(no email on file)';
+
+  // Default editable event name
+  const _defTitle = d.studentName
+    ? `Invitation: KidsBuddy Tutor <> ${d.studentName} | ${d.parentPhone || ''}`.trimEnd()
+    : 'Invitation: KidsBuddy Tutor <> Student Visit';
+  document.getElementById('cp-event-name').value = _defTitle;
+
+  // Default editable description
+  const lines = [`KidsBuddy Visit — ${d.tutorName}`];
+  if (d.parentName)  lines.push(`Parent: ${d.parentName}${d.parentPhone ? ' · ' + d.parentPhone : ''}`);
+  if (d.studentName) lines.push(`Student: ${d.studentName}`);
+  document.getElementById('cp-event-desc').value = lines.join('\n');
+
+  const btn = document.getElementById('btn-cp-yes');
+  btn.disabled       = !d.tutorEmail;
+  btn.textContent    = 'Yes, Block';
+  btn.dataset.calSheetRow  = d.sheetRow;
+  btn.dataset.calTutorName = d.tutorName;
+  btn.dataset.calEmail     = d.tutorEmail || '';
+  btn.dataset.calDateStr   = d.dateStr;
+
+  document.getElementById('cal-prompt-modal').style.display = 'flex';
+}
+
+function closeCalendarPromptModal() {
+  document.getElementById('cal-prompt-modal').style.display = 'none';
+}
+
+function openCalendarPromptFromCard(sheetRow) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const pRaw = (allRows[ri][C.SCHEDULED_PARENT] || '').trim();
+  const [pName, pPhone, pStudent] = pRaw ? pRaw.split('|') : [];
+  openCalendarPromptModal({
+    sheetRow,
+    tutorName:   cell(allRows[ri], C.NAME),
+    tutorEmail:  cell(allRows[ri], C.EMAIL),
+    dateStr:     cell(allRows[ri], C.INTERVIEW_AT),
+    parentName:  pName   || '',
+    parentPhone: pPhone  || '',
+    studentName: pStudent || '',
+  });
+}
+
+// TODO: Remove this restriction once calendar flow is fully tested in production
+const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com'];
+
+async function addCalendarFor(role) {
+  if (role !== 'tutor') return;
+  const btn      = document.getElementById('btn-cp-yes');
+  const sheetRow = parseInt(btn.dataset.calSheetRow);
+  const name     = btn.dataset.calTutorName;
+  const email    = btn.dataset.calEmail;
+  const dateStr  = btn.dataset.calDateStr;
+  const desc      = document.getElementById('cp-event-desc').value.trim();
+  const eventName = document.getElementById('cp-event-name').value.trim();
+
+  // Dev restriction: only send invites to whitelisted accounts
+  if (!_CAL_ALLOWED_EMAILS.includes((email || '').toLowerCase())) {
+    console.warn('[Calendar] Blocked — not in allowed list:', email);
+    closeCalendarPromptModal();
+    showError('Calendar invite restricted to test accounts during dev. No invite sent.');
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = '…';
+  showLoader();
+  try {
+    await _syncCalendarEvent(sheetRow, name, email, dateStr, desc, eventName);
+    closeCalendarPromptModal();
+    hideLoader();
+    // Re-render the card's schedule section to show "Blocked in Calendar"
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) {
+      const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
+      if (container) {
+        container.innerHTML = interviewStatusHTML(
+          cell(allRows[ri], C.INTERVIEW_STATUS),
+          cell(allRows[ri], C.INTERVIEW_AT),
+          sheetRow
+        );
+      }
+    }
+  } catch (err) {
+    hideLoader();
+    btn.disabled    = false;
+    btn.textContent = 'Yes, Block';
+    if (err.message.includes('403')) {
+      showError('Calendar access not granted. Sign out and sign back in to allow Calendar access.');
+    } else {
+      showError('Calendar error: ' + err.message);
+    }
+  }
+}
+
+// ── Google Calendar ───────────────────────────────────────────────────────────
+function _buildCalendarBody(tutorName, tutorEmail, storedDateStr, description = '', eventName = '') {
+  const d    = parseDate(storedDateStr);
+  const end  = new Date(d.getTime() + 60 * 60 * 1000);
+  const iso  = dt => `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}T${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:00`;
+  const _sName = description.match(/Student:\s*(.+)/)?.[1]?.trim();
+  const _sPhone = description.match(/Parent:.*?·\s*([^\n]+)/)?.[1]?.trim();
+  const _defaultTitle = _sName
+    ? `Invitation: KidsBuddy Tutor <> ${_sName} | ${_sPhone || ''}`.trimEnd()
+    : 'Invitation: KidsBuddy Tutor <> Student Visit';
+  const body = {
+    summary: eventName || _defaultTitle,
+    start:   { dateTime: iso(d),   timeZone: 'Asia/Kolkata' },
+    end:     { dateTime: iso(end), timeZone: 'Asia/Kolkata' },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 60 },
+        { method: 'email', minutes: 60 },
+      ],
+    },
+  };
+  if (description)  body.description = description;
+  if (tutorEmail)   body.attendees   = [{ email: tutorEmail }];
+  return body;
+}
+
+async function _deleteCalendarEvent(eventId) {
+  const url  = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`;
+  const resp = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+  if (!resp.ok && resp.status !== 410) { // 410 = already deleted
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(`Calendar DELETE: ${resp.status} — ${err?.error?.message || 'unknown'}`);
+  }
+}
+
+async function _syncCalendarEvent(sheetRow, tutorName, tutorEmail, storedDateStr, description = '', eventName = '') {
+  const ri         = allRows.findIndex(r => r._sheetRow === sheetRow);
+  const existingId = ri !== -1 ? (allRows[ri][C.CALENDAR_EVENT_ID] || '').trim() : '';
+  const method  = existingId ? 'PATCH' : 'POST';
+  const baseUrl = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+  const url     = existingId
+    ? `${baseUrl}/${existingId}?sendUpdates=all`
+    : `${baseUrl}?sendUpdates=all`;
+
+  const resp = await fetch(url, {
+    method,
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(_buildCalendarBody(tutorName, tutorEmail, storedDateStr, description, eventName)),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(`Calendar ${method}: ${resp.status} — ${err?.error?.message || 'unknown'}`);
+  }
+  const data = await resp.json();
+  if (data.id && ri !== -1) {
+    allRows[ri][C.CALENDAR_EVENT_ID] = data.id;
+    await updateCell(sheetRow, C.CALENDAR_EVENT_ID + 1, data.id);
+  }
 }
 
 function searchParentsForWA(q) {
@@ -819,16 +1525,21 @@ function searchParentsForWA(q) {
 function selectWAParent(idx) {
   const r = _waParentMatches[idx];
   if (!r) return;
-  _waShareData.parentName    = cell(r, CP.NAME);
-  _waShareData.parentPhone   = cell(r, CP.PHONE);
-  _waShareData.studentName   = cell(r, CP.STUDENT_NAME);
+  _waShareData.parentName  = cell(r, CP.NAME);
+  _waShareData.parentPhone = cell(r, CP.PHONE);
+  _waShareData.studentName = cell(r, CP.STUDENT_NAME);
 
-  document.getElementById('wa-parent-search').value        = '';
-  document.getElementById('wa-parent-dropdown').style.display = 'none';
-  const sel = document.getElementById('wa-selected-parent');
-  sel.textContent    = _waShareData.parentName + (_waShareData.studentName ? ' · Student: ' + _waShareData.studentName : '') + (_waShareData.parentPhone ? ' · ' + _waShareData.parentPhone : '');
-  sel.style.display  = 'block';
+  const parentNameEl = document.getElementById('wa-parent-name');
+  parentNameEl.textContent = _waShareData.parentName + (_waShareData.studentName ? ' · ' + _waShareData.studentName : '') + (_waShareData.parentPhone ? ' · ' + _waShareData.parentPhone : '');
+  parentNameEl.style.display = 'block';
+  document.getElementById('wa-parent-search-wrap').style.display = 'none';
+
+  const visitWith = document.getElementById('wa-visit-with');
+  visitWith.textContent = 'Visit with — ' + _waShareData.parentName + (_waShareData.studentName ? ' & ' + _waShareData.studentName : '');
+  visitWith.style.display = 'block';
+
   document.getElementById('btn-send-parent').disabled = false;
+  document.getElementById('wa-parent-msg').value = buildWAMessage('parent');
 }
 
 function buildWAMessage(role) {
@@ -845,7 +1556,8 @@ function sendWATo(role) {
   if (!phone) return;
   const digits = phone.replace(/\D/g,'');
   const num    = digits.length === 10 ? '91' + digits : digits;
-  const msg    = encodeURIComponent(buildWAMessage(role));
+  const msgEl  = document.getElementById(role === 'tutor' ? 'wa-tutor-msg' : 'wa-parent-msg');
+  const msg    = encodeURIComponent(msgEl ? msgEl.value : buildWAMessage(role));
   window.open(`https://wa.me/${num}?text=${msg}`, '_blank', 'noopener');
   // modal stays open intentionally
 }
@@ -854,7 +1566,12 @@ async function saveInterviewSchedule() {
   const modal    = document.getElementById('schedule-modal');
   const sheetRow = parseInt(modal.dataset.sheetRow);
   const dateOnly = _schedulePicker && _schedulePicker.selectedDates[0];
-  if (!dateOnly) return;
+
+  const dateErr   = document.getElementById('schedule-date-err');
+  const parentErr = document.getElementById('schedule-parent-err');
+  dateErr.style.display   = dateOnly   ? 'none' : 'block';
+  parentErr.style.display = _scheduleParent ? 'none' : 'block';
+  if (!dateOnly || !_scheduleParent) return;
 
   const { h, m, ap } = getDrumTime();
   const hours24 = (h % 12) + (ap === 'PM' ? 12 : 0);
@@ -863,14 +1580,20 @@ async function saveInterviewSchedule() {
 
   const btn = modal.querySelector('.btn-schedule-save');
   btn.disabled = true;
+  showLoader();
   try {
     const fmt = `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
-    await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, 'Scheduled');
-    await updateCell(sheetRow, C.INTERVIEW_AT     + 1, fmt);
+    const parentStr = _scheduleParent
+      ? [_scheduleParent.name, _scheduleParent.phone, _scheduleParent.studentName].join('|')
+      : '';
+    await updateCell(sheetRow, C.INTERVIEW_STATUS   + 1, 'Scheduled');
+    await updateCell(sheetRow, C.INTERVIEW_AT        + 1, fmt);
+    await updateCell(sheetRow, C.SCHEDULED_PARENT    + 1, parentStr);
     const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
     if (ri !== -1) {
-      allRows[ri][C.INTERVIEW_STATUS] = 'Scheduled';
-      allRows[ri][C.INTERVIEW_AT]     = fmt;
+      allRows[ri][C.INTERVIEW_STATUS]  = 'Scheduled';
+      allRows[ri][C.INTERVIEW_AT]      = fmt;
+      allRows[ri][C.SCHEDULED_PARENT]  = parentStr;
     }
     const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
     if (container) {
@@ -878,20 +1601,79 @@ async function saveInterviewSchedule() {
       container.dataset.ivAt     = fmt;
       container.innerHTML = interviewStatusHTML('Scheduled', fmt, sheetRow);
     }
-    closeScheduleModal();
-    // open WA share flow
+
+    // Auto-set Contacted = Yes
     const ri2 = allRows.findIndex(r => r._sheetRow === sheetRow);
-    if (ri2 !== -1) {
-      const r = allRows[ri2];
-      openWAShareModal(cell(r, C.NAME), cell(r, C.PHONE), fmt);
+    if (ri2 !== -1 && allRows[ri2][C.CONTACTED] !== 'Yes') {
+      updateCell(sheetRow, C.CONTACTED + 1, 'Yes');
+      allRows[ri2][C.CONTACTED] = 'Yes';
+      const pill = document.querySelector(`.pill-toggle[data-sheet-row="${sheetRow}"][data-col="${C.CONTACTED + 1}"]`);
+      if (pill) { pill.className = 'pill-toggle yes'; pill.dataset.current = 'Yes'; }
+      updateStats();
     }
+
+    // Calendar: auto-sync if already blocked (reschedule), else prompt after WA share
+    const riCal = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (riCal !== -1) {
+      const existingCalId = (allRows[riCal][C.CALENDAR_EVENT_ID] || '').trim();
+      if (existingCalId) {
+        _syncCalendarEvent(sheetRow, cell(allRows[riCal], C.NAME), cell(allRows[riCal], C.EMAIL), fmt)
+          .catch(err => console.warn('[Calendar reschedule]', err.message));
+      } else {
+        const pRaw = (allRows[riCal][C.SCHEDULED_PARENT] || '').trim();
+        const [pName, pPhone, pStudent] = pRaw ? pRaw.split('|') : [];
+        _pendingCalData = {
+          sheetRow,
+          tutorName:   cell(allRows[riCal], C.NAME),
+          tutorEmail:  cell(allRows[riCal], C.EMAIL),
+          dateStr:     fmt,
+          parentName:  pName   || '',
+          parentPhone: pPhone  || '',
+          studentName: pStudent || '',
+        };
+      }
+    }
+
+    closeScheduleModal();
+
+    // WA callback — pre-fill parent if assigned
+    const ri3 = allRows.findIndex(r => r._sheetRow === sheetRow);
+    const waFn = ri3 !== -1
+      ? () => {
+          const p = _scheduleParent;
+          openWAShareModal(
+            cell(allRows[ri3], C.NAME), cell(allRows[ri3], C.PHONE), fmt,
+            p?.name || '', p?.phone || '', p?.studentName || ''
+          );
+        }
+      : null;
+    // Auto-set Contacted=Yes and In-Loop (scheduling = first contact signal)
+    if (ri3 !== -1) {
+      if (allRows[ri3][C.CONTACTED] !== 'Yes') {
+        updateCell(sheetRow, C.CONTACTED + 1, 'Yes').catch(() => {});
+        allRows[ri3][C.CONTACTED] = 'Yes';
+        const pill = document.querySelector(`.pill-toggle[data-sheet-row="${sheetRow}"][data-col="${C.CONTACTED + 1}"]`);
+        if (pill) { pill.className = 'pill-toggle yes'; pill.dataset.current = 'Yes'; }
+      }
+      if (!allRows[ri3][C.STATUS]) {
+        updateCell(sheetRow, C.STATUS + 1, 'In-Loop').catch(() => {});
+        allRows[ri3][C.STATUS] = 'In-Loop';
+        const badge = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`)
+          ?.closest('tr.data-row')?.querySelector('.status-badge');
+        if (badge) { badge.textContent = 'In-Loop'; badge.className = 'status-badge badge-inloop'; }
+      }
+    }
+    hideLoader();
+    waFn?.();
   } catch (err) {
+    hideLoader();
     showError('Failed to save interview date: ' + err.message);
   }
   btn.disabled = false;
 }
 
 async function markInterview(sheetRow, result) {
+  showLoader();
   try {
     await updateCell(sheetRow, C.INTERVIEW_STATUS + 1, result);
     const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
@@ -901,9 +1683,64 @@ async function markInterview(sheetRow, result) {
       container.dataset.ivStatus = result;
       container.innerHTML = interviewStatusHTML(result, '', sheetRow);
     }
+    const fi  = filteredRows.findIndex(r => r._sheetRow === sheetRow);
+    const uid = fi !== -1 ? `r${fi}` : null;
+    if (result === 'Cleared') {
+      if (uid) await updateStatus(sheetRow, uid, 'Onboarded');
+    } else if (result === 'Rejected') {
+      if (uid) showPostRejectionMoveModal(sheetRow, uid);
+    }
+    hideLoader();
   } catch (err) {
+    hideLoader();
     showError('Failed to update interview status: ' + err.message);
   }
+}
+
+function showPostRejectionMoveModal(sheetRow, uid) {
+  const modal = document.getElementById('move-modal');
+  modal.querySelector('.move-sheet-title').textContent = 'Interview rejected — move tutor?';
+  document.getElementById('move-options').innerHTML =
+    `<button class="btn-move-opt" onclick="closeMoveModal();_rejectionMove(${sheetRow},'${uid}','')">Keep in All</button>` +
+    `<button class="btn-move-opt" onclick="closeMoveModal();_rejectionMove(${sheetRow},'${uid}','In-Loop')">Add to In-Loop</button>` +
+    `<button class="btn-move-opt btn-move-danger" id="_rejection-bin-btn">Move to Bin</button>`;
+  document.getElementById('_rejection-bin-btn').onclick = () => {
+    closeMoveModal();
+    showConfirm('Move to Bin?<br><span class="confirm-sub">Saved in Bin for 30 days, then permanently removed.</span>', () => _doTrashCard(sheetRow, uid));
+  };
+  const cancelBtn = modal.querySelector('.btn-move-cancel');
+  cancelBtn.onclick = closeMoveModal;
+  modal.onclick = e => { if (e.target === modal) closeMoveModal(); };
+  modal.style.display = 'flex';
+}
+
+async function _rejectionMove(sheetRow, uid, targetStatus) {
+  showLoader();
+  // Reset interview state
+  try {
+    await Promise.all([
+      updateCell(sheetRow, C.INTERVIEW_STATUS + 1, ''),
+      updateCell(sheetRow, C.INTERVIEW_AT     + 1, ''),
+    ]);
+    const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+    if (ri !== -1) {
+      allRows[ri][C.INTERVIEW_STATUS] = '';
+      allRows[ri][C.INTERVIEW_AT]     = '';
+    }
+  } catch (e) { /* non-critical */ }
+
+  // Reset interview UI in place
+  const container = document.querySelector(`.card-interview[data-sheet-row="${sheetRow}"]`);
+  if (container) {
+    container.dataset.ivStatus = '';
+    container.innerHTML = interviewStatusHTML('', '', sheetRow);
+  }
+
+  // Update status (adds to sub-tab or clears)
+  if (targetStatus !== '') {
+    await updateStatus(sheetRow, uid, targetStatus);
+  }
+  hideLoader();
 }
 
 async function logCall(sheetRow) {
@@ -916,6 +1753,98 @@ async function logCall(sheetRow) {
   } catch (err) {
     // silent — call still proceeds even if log fails
   }
+}
+
+// ── BULK SELECT ───────────────────────────────────────────────────────────────
+function handleCardCheck(cb) {
+  if (cb.checked) selectedUids.add(cb.dataset.uid);
+  else selectedUids.delete(cb.dataset.uid);
+  updateBulkBar();
+}
+
+function handleSelectAll(cb) {
+  document.querySelectorAll('.card-check').forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) selectedUids.add(c.dataset.uid);
+    else selectedUids.delete(c.dataset.uid);
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar   = document.getElementById('bulk-bar');
+  const count = selectedUids.size;
+  bar.style.display = count > 0 ? 'flex' : 'none';
+  document.getElementById('bulk-count').textContent = `${count} selected`;
+  const allChecked = count > 0 && count === document.querySelectorAll('.card-check').length;
+  const sa = document.getElementById('select-all-check');
+  if (sa) { sa.checked = allChecked; sa.indeterminate = count > 0 && !allChecked; }
+}
+
+function clearSelection() {
+  document.querySelectorAll('.card-check:checked').forEach(c => c.checked = false);
+  selectedUids.clear();
+  const bar = document.getElementById('bulk-bar');
+  if (bar) bar.style.display = 'none';
+  const sa = document.getElementById('select-all-check');
+  if (sa) { sa.checked = false; sa.indeterminate = false; }
+}
+
+function openBulkMoveModal() {
+  if (!selectedUids.size) return;
+  const cfg   = currentTabConfig();
+  const modal = document.getElementById('move-modal');
+  const cancelBtn = modal.querySelector('.btn-move-cancel');
+  cancelBtn.onclick = closeMoveModal;
+  modal.onclick = e => { if (e.target === modal) closeMoveModal(); };
+
+  let title, optsHTML;
+  if (cfg.statusFilter) {
+    title = `Remove ${selectedUids.size} from ${cfg.label}`;
+    optsHTML = `<button class="btn-move-opt" onclick="closeMoveModal();bulkUpdateStatus('')">Remove from ${cfg.label}</button>`;
+  } else if (!cfg.isBin) {
+    title = `Add ${selectedUids.size} to…`;
+    const subTabs = SECTION_TABS[currentSection].filter(t => t.statusFilter);
+    optsHTML = subTabs.map(t =>
+      `<button class="btn-move-opt" onclick="closeMoveModal();bulkUpdateStatus('${t.statusFilter}')">${t.label}</button>`
+    ).join('');
+  } else {
+    return;
+  }
+  modal.querySelector('.move-sheet-title').textContent = title;
+  document.getElementById('move-options').innerHTML = optsHTML;
+  modal.style.display = 'flex';
+}
+
+async function bulkUpdateStatus(status) {
+  showLoader();
+  const uids = [...selectedUids];
+  for (const uid of uids) {
+    const el = document.querySelector(`tr.data-row[data-uid="${uid}"]`);
+    if (!el) continue;
+    await updateStatus(parseInt(el.dataset.sheetRow), uid, status);
+  }
+  clearSelection();
+  hideLoader();
+}
+
+function bulkDelete() {
+  const count = selectedUids.size;
+  if (!count) return;
+  const label = currentSection === 'parents' ? 'contact' : 'tutor';
+  showConfirm(
+    `Move ${count} ${count === 1 ? label : label + 's'} to Bin?<br><span class="confirm-sub">They auto-purge after 30 days.</span>`,
+    async () => {
+      const uids = [...selectedUids];
+      for (const uid of uids) {
+        const cb = document.querySelector(`.card-check[data-uid="${uid}"]`);
+        if (!cb) continue;
+        const sheetRow = parseInt(cb.dataset.sheetRow);
+        await _doTrashCard(sheetRow, uid);
+      }
+      clearSelection();
+    }
+  );
 }
 
 // ── TRASH / BIN ───────────────────────────────────────────────────────────────
@@ -936,6 +1865,9 @@ function nowSheetFmt() {
 }
 
 async function trashCard(sheetRow, uid) {
+  showConfirm('Move to bin?<br><span class="confirm-sub">Saved in Bin for 30 days, then permanently removed.</span>', () => _doTrashCard(sheetRow, uid));
+}
+async function _doTrashCard(sheetRow, uid) {
   const cfg = currentTabConfig();
   const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
   if (ri === -1) return;
@@ -952,7 +1884,9 @@ async function trashCard(sheetRow, uid) {
   }
 
   const binSheet = currentSection === 'tutors' ? SHEETS.TUTORS_BIN : SHEETS.PARENTS_BIN;
+  const _trashName = currentSection === 'tutors' ? cell(row, C.NAME) : cell(row, CP.NAME);
 
+  showLoader();
   try {
     await ensureSheetIds();
     await apiFetch(
@@ -968,12 +1902,22 @@ async function trashCard(sheetRow, uid) {
       }}}]})}
     );
     allRows.splice(ri, 1);
+    allRows.forEach(r => { if (r._sheetRow > sheetRow) r._sheetRow--; });
+    document.querySelectorAll('[data-sheet-row]').forEach(el => {
+      const sr = parseInt(el.dataset.sheetRow);
+      if (sr > sheetRow) el.dataset.sheetRow = sr - 1;
+    });
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    updateStats();
     const rc = document.getElementById('result-count');
     const label = currentSection === 'parents' ? 'contacts' : 'applications';
     rc.textContent = `${allRows.length} ${label}`;
+    hideLoader();
+    showToast(`Moved ${_trashName} to Bin`);
   } catch (err) {
-    showError('Failed to move to bin: ' + err.message);
+    hideLoader();
+    showToast('Failed to move to bin: ' + err.message, 'error');
   }
 }
 
@@ -995,6 +1939,7 @@ async function restoreCard(sheetRow, uid) {
     rowCopy[CP.ORIGINAL_TAB] = '';
   }
 
+  showLoader();
   try {
     await ensureSheetIds();
     await apiFetch(
@@ -1012,11 +1957,159 @@ async function restoreCard(sheetRow, uid) {
     );
     allRows.splice(ri, 1);
     document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    updateStats();
     const label = currentSection === 'parents' ? 'contacts' : 'applications';
     document.getElementById('result-count').textContent = `${allRows.length} ${label}`;
+    const _restoreName = currentSection === 'tutors' ? cell(row, C.NAME) : cell(row, CP.NAME);
+    showToast(`${_restoreName} restored`);
+    hideLoader();
   } catch (err) {
+    hideLoader();
     showError('Failed to restore: ' + err.message);
   }
+}
+
+// ── MOVE BETWEEN TABS ─────────────────────────────────────────────────────────
+async function moveCard(sheetRow, uid, destSheetName) {
+  const cfg = currentTabConfig();
+  const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const rowCopy = [...allRows[ri]];
+  showLoader();
+  try {
+    await ensureSheetIds();
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(destSheetName)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [rowCopy] }) }
+    );
+    const srcId = sheetIdMap[cfg.sheet];
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: srcId, dimension: 'ROWS',
+        startIndex: sheetRow - 1, endIndex: sheetRow
+      }}}]})}
+    );
+    allRows.splice(ri, 1);
+    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    updateStats();
+    const rc = document.getElementById('result-count');
+    const label = currentSection === 'parents' ? 'contacts' : 'applications';
+    rc.textContent = `${allRows.length} ${label}`;
+    hideLoader();
+  } catch (err) {
+    hideLoader();
+    showError('Failed to move: ' + err.message);
+  }
+}
+
+let _postScheduleWAFn = null;
+function _firePostScheduleWA() {
+  const fn = _postScheduleWAFn;
+  _postScheduleWAFn = null;
+  fn?.();
+}
+
+function showPostScheduleMoveModal(sheetRow, uid, waFn) {
+  // Sub-tabs (In-Loop, Onboarded) and Bin: skip the prompt, go straight to WA share
+  if (currentTabKey !== 'all') {
+    waFn?.();
+    return;
+  }
+
+  // All tab: simple Yes/No — "Add to In-Loop?"
+  _postScheduleWAFn = waFn;
+  const modal = document.getElementById('move-modal');
+  modal.querySelector('.move-sheet-title').innerHTML = 'Mark as Contacted and Add to <strong style="white-space:nowrap">In-Loop?</strong>';
+  document.getElementById('move-options').innerHTML =
+    `<button class="btn-move-opt" onclick="closeMoveModal();updateStatus(${sheetRow},'${uid}','In-Loop');_firePostScheduleWA()">Yes, add to In-Loop</button>` +
+    `<button class="btn-move-opt btn-move-keep" onclick="closeMoveModal();_firePostScheduleWA()">No, stay in All</button>`;
+  const cancelBtn = modal.querySelector('.btn-move-cancel');
+  cancelBtn.onclick = () => { closeMoveModal(); _firePostScheduleWA(); };
+  modal.onclick = e => { if (e.target === modal) { closeMoveModal(); _firePostScheduleWA(); } };
+  modal.style.display = 'flex';
+}
+
+async function updateStatus(sheetRow, uid, status) {
+  const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const col = currentSection === 'tutors' ? C.STATUS : CP.STATUS;
+  showLoader();
+  try {
+    await updateCell(sheetRow, col + 1, status);
+    allRows[ri][col] = status;
+
+    const nameCol = currentSection === 'tutors' ? C.NAME : CP.NAME;
+    const personName = cell(allRows[ri], nameCol);
+    const cfg = currentTabConfig();
+    if (cfg.statusFilter) {
+      // On a sub-tab: card no longer matches — remove from view
+      allRows.splice(ri, 1);
+      document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+      document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+      updateStats();
+      const label = currentSection === 'parents' ? 'contacts' : 'applications';
+      document.getElementById('result-count').textContent = `${allRows.length} ${label}`;
+      const toastMsg = status
+        ? `${personName} moved to ${status}`
+        : `${personName} taken out of ${cfg.label}`;
+      showToast(toastMsg);
+    } else {
+      // On All tab: re-render the status badge in this card
+      const badge = document.querySelector(`.status-badge[data-uid="${uid}"]`);
+      if (badge) {
+        badge.textContent = status;
+        badge.className   = `status-badge${status ? ` badge-${status.toLowerCase().replace('-','').replace(' ','_')}` : ' badge-hidden'}`;
+      }
+      if (status) showToast(`${personName} added to ${status}`);
+    }
+    hideLoader();
+  } catch (err) {
+    hideLoader();
+    showError('Failed to update status: ' + err.message);
+  }
+}
+
+function showMoveModal(sheetRow, uid) {
+  _postScheduleWAFn = null;
+  const cfg   = currentTabConfig();
+  const modal = document.getElementById('move-modal');
+  const cancelBtn = modal.querySelector('.btn-move-cancel');
+  cancelBtn.onclick = closeMoveModal;
+  modal.onclick = e => { if (e.target === modal) closeMoveModal(); };
+
+  let title, optsHTML;
+  if (cfg.statusFilter) {
+    // In-Loop or Onboarded tab — offer removal only
+    title = `Remove from ${cfg.label}`;
+    optsHTML = `<button class="btn-move-opt" onclick="closeMoveModal();updateStatus(${sheetRow},'${uid}','')">Remove from ${cfg.label}</button>`;
+  } else if (!cfg.isBin) {
+    // All tab — offer "Add to" sub-tabs
+    title = 'Add to…';
+    const subTabs = SECTION_TABS[currentSection].filter(t => t.statusFilter);
+    optsHTML = subTabs.map(t =>
+      `<button class="btn-move-opt" onclick="closeMoveModal();updateStatus(${sheetRow},'${uid}','${t.statusFilter}')">${t.label}</button>`
+    ).join('');
+  } else {
+    // Bin — no move-modal (handled elsewhere)
+    return;
+  }
+
+  modal.querySelector('.move-sheet-title').textContent = title;
+  document.getElementById('move-options').innerHTML = optsHTML;
+  modal.style.display = 'flex';
+}
+
+function closeMoveModal() {
+  document.getElementById('move-modal').style.display = 'none';
+}
+
+let _callMoveTimeout = null;
+function handleCallTap(sheetRow, uid) {
+  clearTimeout(_callMoveTimeout);
+  _callMoveTimeout = setTimeout(() => showMoveModal(sheetRow, uid), 3000);
 }
 
 function daysLeft(deletedAtStr) {
@@ -1046,12 +2139,12 @@ function appendBinRows() {
     const leftCls  = left <= 7 ? 'days-left danger' : 'days-left';
 
     const tr = document.createElement('tr');
-    tr.className = 'data-row bin-row';
+    tr.className = 'bin-row';
     tr.dataset.uid = uid;
     tr.innerHTML = `
       <td class="td-bin-info">
         <span class="bin-name">${esc(name)}</span>
-        <span class="bin-meta">${esc(phone)}${origTab ? ` · from ${esc(origTab.replace(/Tutors |Parents /,''))}` : ''}</span>
+        <span class="bin-meta">${esc(phone)}${origTab ? ` · from ${esc((origTab.match(/\((.+)\)/) || ['',''])[1] || origTab)}` : ''}</span>
         <span class="${leftCls}">${left}d left</span>
       </td>
       <td class="td-bin-actions">
@@ -1101,6 +2194,7 @@ async function apiFetch(url, opts = {}) {
 }
 
 async function updateCell(sheetRow, colNum, value) {
+  if (DEV_MODE) return; // no real sheet writes in dev
   const col   = numToCol(colNum - 1);
   const sheet = currentTabConfig().sheet;
   const range = encodeURIComponent(`${sheet}!${col}${sheetRow}`);
@@ -1159,17 +2253,42 @@ function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+let _loaderDepth = 0;
+function showLoader() {
+  if (++_loaderDepth === 1) document.getElementById('page-loader').classList.add('visible');
+}
+function hideLoader() {
+  if (--_loaderDepth <= 0) {
+    _loaderDepth = 0;
+    document.getElementById('page-loader').classList.remove('visible');
+  }
+}
+
 function setTableMsg(msg) {
+  hideLoader();
   document.getElementById('table-body').innerHTML =
     `<tr><td colspan="8" class="state-msg">${msg}</td></tr>`;
 }
 
-function showError(msg) {
-  const el = document.getElementById('error-banner');
-  el.textContent = msg;
-  el.style.display = 'block';
+function showToast(message, type = 'default', duration = 4000) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (type === 'error' ? ' toast-error' : '');
+  toast.innerHTML = `<span class="toast-msg">${esc(message)}</span><button class="toast-close" aria-label="Close">&#x2715;</button>`;
+  container.appendChild(toast);
+  let timer = setTimeout(() => {
+    toast.classList.add('toast-fade');
+    setTimeout(() => toast.remove(), 350);
+  }, duration);
+  toast.querySelector('.toast-close').onclick = () => {
+    clearTimeout(timer);
+    toast.remove();
+  };
 }
 
-function hideError() {
-  document.getElementById('error-banner').style.display = 'none';
+function showError(msg) {
+  showToast(msg, 'error');
 }
+
+function hideError() {}

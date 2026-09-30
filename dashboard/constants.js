@@ -29,8 +29,11 @@ const C = {
   CONTACTED:18, NOTES:19, MAIL_SENT:20,
   LAST_CALLED:21, INTERVIEW_STATUS:22, INTERVIEW_AT:23,
   CURRENT_STUDENTS:24, RATING:25,
-  // Bin-only columns
-  DELETED_AT:26, ORIGINAL_TAB:27
+  CALENDAR_EVENT_ID:26,
+  STATUS:27,
+  SCHEDULED_PARENT:28,
+  // Bin-only columns (DELETED_AT shares index 28 with SCHEDULED_PARENT — different sheets, never mixed)
+  DELETED_AT:28, ORIGINAL_TAB:29
 };
 
 // 0-based column indices — Parents tabs (To-Contact / In-Loop / Onboarded)
@@ -39,8 +42,9 @@ const CP = {
   LOCATION:5, ADDRESS:6, STUDENT_NAME:7, STUDENT_GRADE:8,
   SUBJECTS_NEEDED:9, ASSIGNED_TUTOR:10, LAST_CONTACTED:11,
   CONTACTED:12, NOTES:13, MAILED:14,
+  STATUS:15,
   // Bin-only columns
-  DELETED_AT:15, ORIGINAL_TAB:16
+  DELETED_AT:16, ORIGINAL_TAB:17
 };
 
 // ── PAGINATION ────────────────────────────────────────────────────────────────

@@ -28,17 +28,33 @@ const TARGET_PARENTS_HEADERS = [
   "Contacted", "Notes", "Mailed"
 ];
 
-// Fill these in before running migrateParentsToSheet()
-const PARENTS_SOURCE_SPREADSHEET_ID = "PASTE_PARENTS_SOURCE_SPREADSHEET_ID_HERE";
-const PARENTS_SOURCE_SHEET_NAME     = "PASTE_PARENTS_SOURCE_SHEET_NAME_HERE";
+// "Parents Contacts" tab lives in the same source spreadsheet as "Tutors Applications".
+const PARENTS_SOURCE_SPREADSHEET_ID = SOURCE_SPREADSHEET_ID;
+const PARENTS_SOURCE_SHEET_NAME     = "Parents Contacts";
 // Map: source column header → TARGET_PARENTS_HEADERS column name
-// Update these to match the exact header names in your source sheet
+// Extend this if the "Parents Contacts" tab has additional columns to capture.
 const PARENTS_COLUMN_MAP = {
-  "Customer Full Name":             "Customer Full Name",
-  "Phone num":                      "Phone",
-  "Email":                          "Email",
-  "Location":                       "Location",
-  "Office/ House Address/ other details": "Address"
+  "Customer Full Name":                    "Customer Full Name",
+  "Name":                                  "Customer Full Name",
+  "Phone num":                             "Phone",
+  "Phone":                                 "Phone",
+  "Phone Number":                          "Phone",
+  "Mobile":                                "Phone",
+  "Email":                                 "Email",
+  "Email Address":                         "Email",
+  "Location":                              "Location",
+  "Area":                                  "Location",
+  "City":                                  "Location",
+  "Office/ House Address/ other details":  "Address",
+  "Address":                               "Address",
+  "Student Name":                          "Student Name",
+  "Child Name":                            "Student Name",
+  "Student Grade":                         "Student Grade",
+  "Grade":                                 "Student Grade",
+  "Class":                                 "Student Grade",
+  "Subjects Needed":                       "Subjects Needed",
+  "Subject":                               "Subjects Needed",
+  "Subjects":                              "Subjects Needed",
 };
 
 // Maps each target column to the exact form question it comes from.
@@ -180,6 +196,66 @@ function backfillParentToTarget() {
 }
 
 
+/**
+ * Fresh pull: wipes ALL rows in "Tutors (Applied)" and re-imports every
+ * response from the RAW source sheet from scratch.
+ *
+ * WARNING: Resets all workflow columns (Contacted, Notes, Interview Status,
+ * Interview Scheduled At, Rating, etc.) back to their defaults. Form response
+ * data (name, phone, subjects, timings…) is fully restored.
+ *
+ * Run once from the Apps Script editor when the target sheet data is scrambled.
+ */
+function freshPullTutors() {
+  const sourceSheet = SpreadsheetApp
+    .openById(SOURCE_SPREADSHEET_ID)
+    .getSheetByName(SOURCE_SHEET_NAME);
+
+  if (!sourceSheet) throw new Error(`Source sheet "${SOURCE_SHEET_NAME}" not found.`);
+
+  const lastRow = sourceSheet.getLastRow();
+  if (lastRow <= 1) {
+    Logger.log('No data rows in source sheet — nothing to import.');
+    return;
+  }
+
+  const lastCol = sourceSheet.getLastColumn();
+  const headers = sourceSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const dataRows = sourceSheet.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+
+  const targetSheet = SpreadsheetApp
+    .openById(TARGET_SPREADSHEET_ID)
+    .getSheetByName(TARGET_SHEET_NAME);
+
+  if (!targetSheet) throw new Error(`Target sheet "${TARGET_SHEET_NAME}" not found.`);
+
+  // Wipe everything below the header row
+  const existingRows = targetSheet.getLastRow();
+  if (existingRows > 1) {
+    targetSheet.deleteRows(2, existingRows - 1);
+  }
+  Logger.log(`Cleared ${existingRows - 1} existing rows. Re-importing from RAW…`);
+
+  let synced = 0;
+
+  dataRows.forEach(rowValues => {
+    const namedValues = {};
+    headers.forEach((header, idx) => {
+      const h = String(header || '').trim();
+      if (h) namedValues[h] = [String(rowValues[idx] ?? '')];
+    });
+
+    const appId = generateAppId(targetSheet);
+    targetSheet.appendRow(buildTargetRow(namedValues, appId));
+    synced++;
+
+    Utilities.sleep(150); // stay within Sheets write-rate limits
+  });
+
+  Logger.log(`freshPullTutors complete — ${synced} rows imported.`);
+}
+
+
 // ─── SCHEMA INIT ────────────────────────────────────────────────────────────
 
 /**
@@ -209,8 +285,8 @@ function initTutorSchemaColumns() {
       : [];
 
     const headersToAdd = tabName === "Tutors (Bin)"
-      ? [...TARGET_HEADERS, "Deleted At", "Original Tab"]
-      : TARGET_HEADERS;
+      ? [...TARGET_HEADERS, "Scheduled Parent", "Calendar Event ID", "Status", "Deleted At", "Original Tab"]
+      : [...TARGET_HEADERS, "Scheduled Parent", "Calendar Event ID", "Status"];
 
     headersToAdd.forEach((header, i) => {
       if (!existingHeaders.includes(header)) {
@@ -223,6 +299,204 @@ function initTutorSchemaColumns() {
   });
 
   Logger.log("initTutorSchemaColumns complete.");
+}
+
+/**
+ * One-time: adds the "Calendar Event ID" column to every Tutors tab.
+ *   • Non-Bin tabs  → appends after "Scheduled Parent" (if missing).
+ *   • Tutors (Bin)  → inserts *before* "Deleted At" so column order stays correct.
+ * Safe to re-run — skips any tab that already has the column in the right place.
+ */
+function addCalendarEventIdColumn() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const TUTOR_TABS = [
+    'Tutors (Applied)', 'Tutors (In-Loop)',
+    'Tutors (Onboarded)', 'Tutors (Bin)'
+  ];
+
+  TUTOR_TABS.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) { Logger.log(`Sheet not found: ${tabName}`); return; }
+
+    const lastCol = sheet.getLastColumn();
+    const headers = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim())
+      : [];
+
+    if (headers.includes('Calendar Event ID')) {
+      Logger.log(`"Calendar Event ID" already present in "${tabName}" — skipping.`);
+      return;
+    }
+
+    if (tabName === 'Tutors (Bin)') {
+      // Insert BEFORE "Deleted At" to preserve column order
+      const delIdx = headers.indexOf('Deleted At'); // 0-based
+      if (delIdx !== -1) {
+        const insertAt = delIdx + 1; // 1-based column number
+        sheet.insertColumnBefore(insertAt);
+        sheet.getRange(1, insertAt).setValue('Calendar Event ID').setFontWeight('bold');
+        Logger.log(`Inserted "Calendar Event ID" at col ${insertAt} in "${tabName}".`);
+      } else {
+        // "Deleted At" not found yet — just append
+        const col = sheet.getLastColumn() + 1;
+        sheet.getRange(1, col).setValue('Calendar Event ID').setFontWeight('bold');
+        Logger.log(`Appended "Calendar Event ID" at col ${col} in "${tabName}".`);
+      }
+    } else {
+      // Non-Bin: append after the last existing column
+      const col = sheet.getLastColumn() + 1;
+      sheet.getRange(1, col).setValue('Calendar Event ID').setFontWeight('bold');
+      Logger.log(`Appended "Calendar Event ID" at col ${col} in "${tabName}".`);
+    }
+  });
+
+  Logger.log('addCalendarEventIdColumn complete.');
+}
+
+/**
+ * One-time: adds "Status" column to Applied + Bin tutor sheets (after Calendar Event ID).
+ * Safe to re-run — skips if already present.
+ */
+function addStatusColumn() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const TABS = [
+    { name: 'Tutors (Applied)', before: null },
+    { name: 'Tutors (Bin)',     before: 'Deleted At' },
+    { name: 'Parents (To-Contact)', before: null },
+    { name: 'Parents (Bin)',        before: 'Deleted At' },
+  ];
+  TABS.forEach(({ name, before }) => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) { Logger.log(`Sheet not found: ${name}`); return; }
+    const lastCol = sheet.getLastColumn();
+    const headers = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim())
+      : [];
+    if (headers.includes('Status')) { Logger.log(`"Status" already in "${name}" — skip`); return; }
+    if (before) {
+      const idx = headers.indexOf(before); // 0-based
+      if (idx !== -1) {
+        sheet.insertColumnBefore(idx + 1);
+        sheet.getRange(1, idx + 1).setValue('Status').setFontWeight('bold');
+        Logger.log(`Inserted "Status" before "${before}" in "${name}"`);
+        return;
+      }
+    }
+    const col = sheet.getLastColumn() + 1;
+    sheet.getRange(1, col).setValue('Status').setFontWeight('bold');
+    Logger.log(`Appended "Status" to "${name}"`);
+  });
+  Logger.log('addStatusColumn complete.');
+}
+
+/**
+ * One-time migration: moves rows from Tutors (In-Loop) and Tutors (Onboarded)
+ * back into Tutors (Applied) with Status column set, then clears the sub-sheets.
+ * Run once after addStatusColumn(). IRREVERSIBLE — back up first.
+ */
+function migrateTutorSubTabsToApplied() {
+  const ss      = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const applied = ss.getSheetByName('Tutors (Applied)');
+  const inLoop  = ss.getSheetByName('Tutors (In-Loop)');
+  const onboarded = ss.getSheetByName('Tutors (Onboarded)');
+  if (!applied) { Logger.log('Tutors (Applied) not found — aborting'); return; }
+
+  const appliedHeaders = applied.getRange(1, 1, 1, applied.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const statusCol = appliedHeaders.indexOf('Status'); // 0-based
+
+  function migrateSheet(src, statusValue) {
+    if (!src || src.getLastRow() <= 1) { Logger.log(`No data in ${src?.getName()} — skip`); return; }
+    const data = src.getRange(2, 1, src.getLastRow() - 1, src.getLastColumn()).getValues();
+    data.forEach(row => {
+      if (statusCol >= 0 && row.length > statusCol) row[statusCol] = statusValue;
+      else while (row.length <= statusCol) row.push('');
+      if (row.length <= statusCol) row[statusCol] = statusValue;
+      row[statusCol] = statusValue;
+      applied.appendRow(row);
+    });
+    // Clear data rows (keep header)
+    if (src.getLastRow() > 1) src.deleteRows(2, src.getLastRow() - 1);
+    Logger.log(`Migrated ${data.length} rows from ${src.getName()} with status="${statusValue}"`);
+  }
+
+  migrateSheet(inLoop,    'In-Loop');
+  migrateSheet(onboarded, 'Onboarded');
+  Logger.log('migrateTutorSubTabsToApplied complete.');
+}
+
+/**
+ * One-time: same migration for Parents sub-tabs into Parents (To-Contact).
+ */
+function migrateParentSubTabsToToContact() {
+  const ss        = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const toContact = ss.getSheetByName('Parents (To-Contact)');
+  const inLoop    = ss.getSheetByName('Parents (In-Loop)');
+  const onboarded = ss.getSheetByName('Parents (Onboarded)');
+  if (!toContact) { Logger.log('Parents (To-Contact) not found — aborting'); return; }
+
+  const headers   = toContact.getRange(1, 1, 1, toContact.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const statusCol = headers.indexOf('Status');
+
+  function migrateSheet(src, statusValue) {
+    if (!src || src.getLastRow() <= 1) { Logger.log(`No data in ${src?.getName()} — skip`); return; }
+    const data = src.getRange(2, 1, src.getLastRow() - 1, src.getLastColumn()).getValues();
+    data.forEach(row => {
+      while (row.length <= statusCol) row.push('');
+      row[statusCol] = statusValue;
+      toContact.appendRow(row);
+    });
+    if (src.getLastRow() > 1) src.deleteRows(2, src.getLastRow() - 1);
+    Logger.log(`Migrated ${data.length} rows from ${src.getName()} with status="${statusValue}"`);
+  }
+
+  migrateSheet(inLoop,    'In-Loop');
+  migrateSheet(onboarded, 'Onboarded');
+  Logger.log('migrateParentSubTabsToToContact complete.');
+}
+
+/**
+ * One-time: ensures all Parents tabs have the correct headers.
+ * Safe to re-run — existing columns and data are never touched.
+ * Run manually from the Apps Script editor once.
+ */
+function initParentsSchemaColumns() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const parentsTabs = [
+    "Parents (To-Contact)",
+    "Parents (In-Loop)",
+    "Parents (Onboarded)",
+    "Parents (Bin)"
+  ];
+
+  parentsTabs.forEach(tabName => {
+    let sheet = ss.getSheetByName(tabName);
+    if (!sheet) {
+      sheet = ss.insertSheet(tabName);
+      Logger.log(`Created missing sheet: ${tabName}`);
+    }
+
+    const lastCol = sheet.getLastColumn();
+    const existingHeaders = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim())
+      : [];
+
+    const headersToAdd = tabName === "Parents (Bin)"
+      ? [...TARGET_PARENTS_HEADERS, "Status", "Deleted At", "Original Tab"]
+      : [...TARGET_PARENTS_HEADERS, "Status"];
+
+    headersToAdd.forEach(header => {
+      if (!existingHeaders.includes(header)) {
+        const col = existingHeaders.length + 1;
+        sheet.getRange(1, col).setValue(header).setFontWeight("bold");
+        existingHeaders.push(header);
+        Logger.log(`Added column "${header}" to "${tabName}" at col ${col}`);
+      }
+    });
+
+    if (sheet.getFrozenRows() === 0) sheet.setFrozenRows(1);
+  });
+
+  Logger.log("initParentsSchemaColumns complete.");
 }
 
 /**
@@ -265,12 +539,8 @@ function fixDuplicateHeaders() {
  * well within Apps Script's 6-minute execution limit.
  */
 function migrateParentsToSheet() {
-  if (PARENTS_SOURCE_SPREADSHEET_ID === "PASTE_PARENTS_SOURCE_SPREADSHEET_ID_HERE") {
-    throw new Error("Set PARENTS_SOURCE_SPREADSHEET_ID before running this function.");
-  }
-
-  const src   = SpreadsheetApp.openById(PARENTS_SOURCE_SPREADSHEET_ID)
-                              .getSheetByName(PARENTS_SOURCE_SHEET_NAME);
+  const src = SpreadsheetApp.openById(PARENTS_SOURCE_SPREADSHEET_ID)
+                            .getSheetByName(PARENTS_SOURCE_SHEET_NAME);
   if (!src) throw new Error(`Source sheet "${PARENTS_SOURCE_SHEET_NAME}" not found.`);
 
   const srcLastRow = src.getLastRow();
@@ -716,4 +986,64 @@ function validateWebhookUrl() {
   ) {
     throw new Error("Paste your new Discord webhook URL at the top.");
   }
+}
+
+
+// ── AUTO-PURGE BIN (30-day cleanup) ──────────────────────────────────────────
+
+const BIN_TABS = ["Tutors (Bin)", "Parents (Bin)"];
+const PURGE_AFTER_DAYS = 30;
+
+/**
+ * Deletes rows from Bin tabs where "Deleted At" is older than PURGE_AFTER_DAYS.
+ * Run this on a daily time-based trigger via createPurgeTrigger().
+ */
+function purgeBin() {
+  const ss      = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const cutoff  = new Date();
+  cutoff.setDate(cutoff.getDate() - PURGE_AFTER_DAYS);
+
+  BIN_TABS.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) return;
+
+    const data    = sheet.getDataRange().getValues();
+    if (data.length < 2) return; // header only
+
+    const headers     = data[0];
+    const deletedAtCol = headers.indexOf("Deleted At");
+    if (deletedAtCol === -1) return; // column not found
+
+    // Collect 1-indexed row numbers to delete (iterate bottom-up to avoid shifting)
+    const toDelete = [];
+    for (let i = data.length - 1; i >= 1; i--) {
+      const raw = data[i][deletedAtCol];
+      if (!raw) continue;
+      const deletedAt = new Date(raw);
+      if (isNaN(deletedAt.getTime())) continue;
+      if (deletedAt < cutoff) toDelete.push(i + 1); // +1: 1-indexed sheet row
+    }
+
+    toDelete.forEach(rowNum => sheet.deleteRow(rowNum));
+    Logger.log(`[purgeBin] ${tabName}: deleted ${toDelete.length} row(s) older than ${PURGE_AFTER_DAYS} days`);
+  });
+}
+
+/**
+ * Run once to create a daily midnight trigger for purgeBin().
+ * Safe to re-run — it deletes any existing purgeBin triggers first.
+ */
+function createPurgeTrigger() {
+  // Remove existing triggers for purgeBin to avoid duplicates
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'purgeBin')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger('purgeBin')
+    .timeBased()
+    .everyDays(1)
+    .atHour(0)
+    .create();
+
+  Logger.log('Daily purgeBin trigger created (runs at midnight every day).');
 }
