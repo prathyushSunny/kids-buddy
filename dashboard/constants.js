@@ -3,7 +3,8 @@ const CLIENT_ID = '993142394562-4lrr9i1rvgu0d9kpou03tu6h6pm3jlhm.apps.googleuser
 
 const ALLOWED_EMAILS = [
   'kids.buddy.hometution@gmail.com',
-  's.kumari.shirisha@gmail.com'
+  's.kumari.shirisha@gmail.com',
+  'prathyushsunny@gmail.com'
 ];
 
 // ── SPREADSHEET ───────────────────────────────────────────────────────────────
