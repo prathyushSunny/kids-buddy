@@ -30,6 +30,7 @@ const SECTION_TABS = {
     { key: 'all',        label: 'All',        sheet: SHEETS.TUTORS_APPLIED },
     { key: 'in_loop',    label: 'In-Loop',    sheet: SHEETS.TUTORS_APPLIED,  statusFilter: 'In-Loop' },
     { key: 'onboarded',  label: 'Onboarded',  sheet: SHEETS.TUTORS_APPLIED,  statusFilter: 'Onboarded' },
+    { key: 'draft',      label: 'Draft',      sheet: SHEETS.TUTORS_DRAFT,    isDraft: true },
     { key: 'bin',        label: 'Bin',        sheet: SHEETS.TUTORS_BIN,      isBin: true },
   ],
   parents: [
@@ -39,6 +40,15 @@ const SECTION_TABS = {
     { key: 'bin',        label: 'Bin',        sheet: SHEETS.PARENTS_BIN,        isBin: true },
   ],
 };
+
+const SOURCE_OPTIONS = [
+  { value: 'Cold calling', icon: '📞' },
+  { value: 'Facebook',     icon: '📘' },
+  { value: 'Instagram',    icon: '📸' },
+  { value: 'Poster',       icon: '🗞️' },
+  { value: 'Referral',     icon: '👥' },
+  { value: 'WhatsApp',     icon: '💬' },
+];
 
 function currentTabConfig() {
   return SECTION_TABS[currentSection].find(t => t.key === currentTabKey)
@@ -66,7 +76,7 @@ function renderTabUI() {
   // Sub-tabs — rebuild
   const tabs = SECTION_TABS[currentSection];
   document.getElementById('sub-tabs').innerHTML = tabs.map(t =>
-    `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}"
+    `<button class="sub-tab${t.key === currentTabKey ? ' active' : ''}${t.isBin ? ' bin-tab' : ''}${t.isDraft ? ' draft-tab' : ''}"
       onclick="switchTab('${t.key}')">${t.label}</button>`
   ).join('');
   // Search placeholder
@@ -74,6 +84,9 @@ function renderTabUI() {
     ? 'Search name, phone, location…'
     : 'Search name, phone, email, college…';
   document.getElementById('search').placeholder = ph;
+  // Show "Add Parent" button only in parents tab
+  const addBtn = document.getElementById('btn-add-parent');
+  if (addBtn) addBtn.style.display = currentSection === 'parents' ? '' : 'none';
 }
 
 // ── SESSION STORAGE ───────────────────────────────────────────────────────────
@@ -435,6 +448,9 @@ const MOVE_SVG     = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none
 const SUBJECTS_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
 const PIN_SVG      = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 const RUPEE_SVG    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>`;
+const CLOCK_SVG    = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+const DRAFT_SVG    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`;
+const ADD_SVG      = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 
 function renderTable(filtered) {
   filteredRows  = filtered;
@@ -455,7 +471,8 @@ function renderTable(filtered) {
 }
 
 function appendRows() {
-  if (currentTabConfig().isBin) return appendBinRows();
+  if (currentTabConfig().isBin)   return appendBinRows();
+  if (currentTabConfig().isDraft) return appendDraftRows();
   if (currentSection === 'parents') return appendParentRows();
   if (renderedCount >= filteredRows.length) return;
 
@@ -511,10 +528,10 @@ function appendRows() {
       </td>
       <td class="td-classes">
         <div class="info-flat-rows">
-          ${cell(row, C.SUBJECTS) ? `<span class="info-flat-row">${SUBJECTS_SVG}${esc(cell(row, C.SUBJECTS))}</span>` : ''}
-          ${cell(row, C.CLASSES)  ? `<span class="info-flat-row">${CLASSES_SVG}${esc(cell(row, C.CLASSES))}</span>`  : ''}
-          ${cell(row, C.PAY)      ? `<span class="info-flat-row">${RUPEE_SVG}${esc(cell(row, C.PAY))}</span>`        : ''}
-          ${cell(row, C.LOCATION) ? `<span class="info-flat-row">${PIN_SVG}${esc(cell(row, C.LOCATION))}</span>` : ''}
+          ${cell(row, C.TIMINGS)  ? `<span class="info-flat-row">${CLOCK_SVG}${esc(cell(row, C.TIMINGS))}</span>`   : ''}
+          ${cell(row, C.PAY)      ? `<span class="info-flat-row">${RUPEE_SVG}${esc(cell(row, C.PAY))}</span>`       : ''}
+          ${cell(row, C.LOCATION) ? `<span class="info-flat-row">${PIN_SVG}${esc(cell(row, C.LOCATION))}</span>`    : ''}
+          ${sourceChipHTML(cell(row, C.SOURCE), sheetRow)}
         </div>
         <div class="card-section">
           <div class="card-section-header"><span class="cs-label">${USER_SVG} Contact</span></div>
@@ -548,6 +565,7 @@ function appendRows() {
       <td>
         <div class="card-top-actions">
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
+          <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
           <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
@@ -696,6 +714,7 @@ function appendParentRows() {
       <td>
         <div class="card-top-actions">
           <label class="card-check-wrap" onclick="event.stopPropagation()"><input type="checkbox" class="card-check" data-uid="${uid}" data-sheet-row="${sheetRow}" onchange="handleCardCheck(this)"><span class="card-check-box"></span><span class="card-action-label">Select</span></label>
+          <button class="btn-card-edit" onclick="event.stopPropagation();openEditCardModal(${sheetRow},'${uid}')" title="Edit">${PENCIL_SVG}<span class="card-action-label">Edit</span></button>
           <button class="btn-card-move" onclick="event.stopPropagation();showMoveModal(${sheetRow},'${uid}')" title="Move to tab">${MOVE_SVG}<span class="card-action-label">Add to</span></button>
           <button class="btn-card-trash" onclick="event.stopPropagation();trashCard(${sheetRow},'${uid}')" title="Move to bin">${TRASH_SVG}<span class="card-action-label">Delete</span></button>
         </div>
@@ -1543,12 +1562,12 @@ function selectWAParent(idx) {
 }
 
 function buildWAMessage(role) {
-  const { tutorName, tutorPhone, parentName, parentPhone, studentName, dateStr } = _waShareData;
+  const { tutorName, parentName, studentName, dateStr } = _waShareData;
   const date = formatDate(dateStr);
   if (role === 'tutor') {
-    return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n📞 Parent: ${parentName || '—'}${parentPhone ? ' · ' + parentPhone : ''}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
+    return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
   }
-  return `Hi ${parentName}! 👋\n\n*KidsBuddy* has arranged a tutor visit at your home:\n\n📅 ${date}\n👩‍🏫 Tutor: ${tutorName || '—'}${tutorPhone ? ' · ' + tutorPhone : ''}\n\nPlease ensure someone is available. Thank you!\n— KidsBuddy Team`;
+  return `Hi ${parentName}! 👋\n\n*KidsBuddy* has arranged a tutor visit at your home:\n\n📅 ${date}\n👩‍🏫 Tutor: ${tutorName || '—'}\n\nPlease ensure someone is available. Thank you!\n— KidsBuddy Team`;
 }
 
 function sendWATo(role) {
@@ -1864,6 +1883,374 @@ function nowSheetFmt() {
   return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
 }
 
+// ── SOURCE CHIP ───────────────────────────────────────────────────────────────
+
+function sourceChipHTML(value, sheetRow) {
+  const opt = SOURCE_OPTIONS.find(o => o.value === value);
+  const icon  = opt ? opt.icon : '·';
+  const label = opt ? opt.value : (value || 'Source');
+  return `<span class="source-chip" onclick="event.stopPropagation();openSourceDropdown(this,${sheetRow})" title="Change source">${icon} ${esc(label)}</span>`;
+}
+
+function openSourceDropdown(chip, sheetRow) {
+  document.querySelectorAll('.source-dd').forEach(d => d.remove());
+  const rect = chip.getBoundingClientRect();
+  const dd = document.createElement('div');
+  dd.className = 'source-dd';
+  dd.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+  dd.style.left = `${rect.left + window.scrollX}px`;
+  dd.innerHTML = SOURCE_OPTIONS.map(o =>
+    `<div class="source-dd-item" onclick="event.stopPropagation();selectSource(this,${sheetRow},'${o.value}')">${o.icon} ${esc(o.value)}</div>`
+  ).join('');
+  document.body.appendChild(dd);
+  const close = e => { if (!dd.contains(e.target)) dd.remove(); };
+  setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+}
+
+async function selectSource(item, sheetRow, value) {
+  item.closest('.source-dd')?.remove();
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  allRows[ri][C.SOURCE] = value;
+
+  const chip = document.querySelector(`[data-sheet-row="${sheetRow}"] .source-chip`)
+    || document.querySelector(`.data-row .source-chip`);
+  const opt   = SOURCE_OPTIONS.find(o => o.value === value);
+  if (chip) chip.innerHTML = `${opt?.icon || '·'} ${esc(value)}`;
+
+  showLoader();
+  try {
+    await updateCell(sheetRow, C.SOURCE + 1, value);
+    hideLoader();
+    showToast(`Source updated to ${value}`);
+  } catch (err) {
+    hideLoader();
+    allRows[ri][C.SOURCE] = '';
+    showToast('Failed to update source: ' + err.message, 'error');
+  }
+}
+
+// ── DRAFT TAB ─────────────────────────────────────────────────────────────────
+
+async function moveToDraft(sheetRow, uid) {
+  showConfirm('Move to Draft?<br><span class="confirm-sub">Saved permanently in Draft — no auto-purge.</span>', () => _doMoveToDraft(sheetRow, uid));
+}
+
+async function _doMoveToDraft(sheetRow, uid) {
+  const cfg = currentTabConfig();
+  const ri  = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row  = allRows[ri];
+  const name = cell(row, C.NAME);
+
+  showLoader();
+  try {
+    await ensureSheetIds();
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_DRAFT)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [[...row]] }) }
+    );
+    const srcId = sheetIdMap[cfg.sheet];
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: srcId, dimension: 'ROWS',
+        startIndex: sheetRow - 1, endIndex: sheetRow
+      }}}]})}
+    );
+    allRows.splice(ri, 1);
+    allRows.forEach(r => { if (r._sheetRow > sheetRow) r._sheetRow--; });
+    document.querySelectorAll('[data-sheet-row]').forEach(el => {
+      const sr = parseInt(el.dataset.sheetRow);
+      if (sr > sheetRow) el.dataset.sheetRow = sr - 1;
+    });
+    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    updateStats();
+    const rc = document.getElementById('result-count');
+    rc.textContent = `${allRows.length} applications`;
+    hideLoader();
+    showToast(`${name} moved to Draft`);
+  } catch (err) {
+    hideLoader();
+    showToast('Failed to move to draft: ' + err.message, 'error');
+  }
+}
+
+async function restoreFromDraft(sheetRow, uid) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row  = allRows[ri];
+  const name = cell(row, C.NAME);
+
+  showLoader();
+  try {
+    await ensureSheetIds();
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEETS.TUTORS_APPLIED)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [[...row]] }) }
+    );
+    const draftId = sheetIdMap[SHEETS.TUTORS_DRAFT];
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}:batchUpdate`,
+      { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: draftId, dimension: 'ROWS',
+        startIndex: sheetRow - 1, endIndex: sheetRow
+      }}}]})}
+    );
+    allRows.splice(ri, 1);
+    document.querySelector(`tr.data-row[data-uid="${uid}"]`)?.remove();
+    document.querySelector(`tr.detail-row[data-uid="${uid}"]`)?.remove();
+    updateStats();
+    hideLoader();
+    showToast(`${name} restored to All`);
+  } catch (err) {
+    hideLoader();
+    showToast('Failed to restore from draft: ' + err.message, 'error');
+  }
+}
+
+function appendDraftRows() {
+  if (renderedCount >= filteredRows.length) return;
+  const tbody = document.getElementById('table-body');
+  const old = document.getElementById('scroll-sentinel');
+  if (old) old.remove();
+
+  const batch = filteredRows.slice(renderedCount, renderedCount + PAGE_SIZE);
+  batch.forEach((row, bi) => {
+    const fi       = renderedCount + bi;
+    const sheetRow = row._sheetRow;
+    const uid      = `d${fi}`;
+    const name     = cell(row, C.NAME);
+    const phone    = cell(row, C.PHONE);
+    const location = cell(row, C.LOCATION);
+    const submitted = formatDate(cell(row, C.SUBMITTED));
+
+    const tr = document.createElement('tr');
+    tr.className = 'bin-row';
+    tr.dataset.uid = uid;
+    tr.innerHTML = `
+      <td class="td-bin-info">
+        <span class="bin-name">${esc(name)}</span>
+        <span class="bin-meta">${esc(phone)}${location ? ` · ${esc(location)}` : ''}</span>
+        <span class="bin-sub-date">${esc(submitted)}</span>
+      </td>
+      <td class="td-bin-actions">
+        <button class="btn-restore" onclick="event.stopPropagation();restoreFromDraft(${sheetRow},'${uid}')" title="Restore to All">
+          ${RESTORE_SVG} Restore
+        </button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  renderedCount += batch.length;
+
+  if (renderedCount < filteredRows.length) {
+    const sentinel = document.createElement('tr');
+    sentinel.id = 'scroll-sentinel';
+    tbody.appendChild(sentinel);
+    if (scrollObserver) scrollObserver.observe(sentinel);
+  }
+}
+
+// ── ADD PARENT ────────────────────────────────────────────────────────────────
+
+function openAddParentModal() {
+  const m = document.getElementById('add-parent-modal');
+  if (!m) return;
+  m.querySelectorAll('input, textarea, select').forEach(el => { el.value = ''; });
+  document.getElementById('ap-status').value = '';
+  m.style.display = 'flex';
+}
+
+function closeAddParentModal() {
+  document.getElementById('add-parent-modal').style.display = 'none';
+}
+
+async function saveNewParent() {
+  const get = id => (document.getElementById(id)?.value || '').trim();
+  const name     = get('ap-name');
+  const phone    = get('ap-phone');
+  const email    = get('ap-email');
+  const location = get('ap-location');
+  const address  = get('ap-address');
+  const student  = get('ap-student-name');
+  const grade    = get('ap-student-grade');
+  const subjects = get('ap-subjects');
+  const notes    = get('ap-notes');
+  const status   = get('ap-status');
+
+  if (!name) { showToast('Name is required', 'error'); return; }
+
+  const today = (() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
+  })();
+
+  // Generate parent ID
+  const maxId = allRows.reduce((max, r) => {
+    const id = cell(r, CP.PARENT_ID);
+    const n  = parseInt((id.match(/(\d+)$/) || [])[1] || '0');
+    return Math.max(max, n);
+  }, 0);
+  const parentId = `KB-P-${String(maxId + 1).padStart(4, '0')}`;
+
+  // Build row matching CP schema
+  const row = [];
+  row[CP.PARENT_ID]       = parentId;
+  row[CP.ONBOARDED_ON]    = today;
+  row[CP.NAME]            = name;
+  row[CP.PHONE]           = phone;
+  row[CP.EMAIL]           = email;
+  row[CP.LOCATION]        = location;
+  row[CP.ADDRESS]         = address;
+  row[CP.STUDENT_NAME]    = student;
+  row[CP.STUDENT_GRADE]   = grade;
+  row[CP.SUBJECTS_NEEDED] = subjects;
+  row[CP.ASSIGNED_TUTOR]  = '';
+  row[CP.LAST_CONTACTED]  = '';
+  row[CP.CONTACTED]       = 'No';
+  row[CP.NOTES]           = notes;
+  row[CP.MAILED]          = 'No';
+  row[CP.STATUS]          = status;
+
+  const targetSheet = status === 'In-Loop'
+    ? SHEETS.PARENTS_TO_CONTACT
+    : SHEETS.PARENTS_TO_CONTACT;
+
+  showLoader();
+  try {
+    await apiFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(targetSheet)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: 'POST', body: JSON.stringify({ values: [row] }) }
+    );
+    hideLoader();
+    closeAddParentModal();
+    showToast(`${name} added to Parents`);
+    if (currentSection === 'parents') loadApplications();
+  } catch (err) {
+    hideLoader();
+    showToast('Failed to add parent: ' + err.message, 'error');
+  }
+}
+
+// ── EDIT CARD MODAL ───────────────────────────────────────────────────────────
+
+let _editCardSheetRow = null;
+let _editCardSection  = null;
+let _editCardRI       = null;
+
+const TUTOR_EDIT_FIELDS = [
+  { id: 'ec-name',      label: 'Name',              col: 'NAME',      type: 'text' },
+  { id: 'ec-phone',     label: 'Phone',             col: 'PHONE',     type: 'tel' },
+  { id: 'ec-email',     label: 'Email',             col: 'EMAIL',     type: 'email' },
+  { id: 'ec-college',   label: 'College / Company', col: 'COLLEGE',   type: 'text' },
+  { id: 'ec-location',  label: 'Stay Location',     col: 'LOCATION',  type: 'text' },
+  { id: 'ec-student',   label: 'Student or Working',col: 'STUDENT',   type: 'select',
+    opts: ['Student', 'Working'] },
+  { id: 'ec-travel',    label: 'Travel Mode',       col: 'TRAVEL',    type: 'select',
+    opts: ['Bike', 'Bus', 'Own vehicle', 'Public transport', 'Walk'] },
+  { id: 'ec-classes',   label: 'Classes',           col: 'CLASSES',   type: 'text', hint: 'e.g. Classes 1-5, 6-8' },
+  { id: 'ec-subjects',  label: 'Subjects',          col: 'SUBJECTS',  type: 'text' },
+  { id: 'ec-languages', label: 'Languages',         col: 'LANGUAGES', type: 'text' },
+  { id: 'ec-extras',    label: 'Extra Activities',  col: 'EXTRAS',    type: 'text' },
+  { id: 'ec-timings',   label: 'Available Timings', col: 'TIMINGS',   type: 'text' },
+  { id: 'ec-pay',       label: 'Expected Pay / hr', col: 'PAY',       type: 'text', hint: 'e.g. 500-1000' },
+  { id: 'ec-workhours', label: 'College / Work Timings', col: 'WORKHOURS', type: 'text' },
+  { id: 'ec-open',      label: 'Open to Contact',   col: 'OPEN',      type: 'select',
+    opts: ['Yes', 'No'] },
+  { id: 'ec-source',    label: 'Source',            col: 'SOURCE',    type: 'select',
+    opts: SOURCE_OPTIONS.map(o => o.value) },
+];
+
+const PARENT_EDIT_FIELDS = [
+  { id: 'ec-name',     label: 'Full Name',      col: 'NAME',            type: 'text' },
+  { id: 'ec-phone',    label: 'Phone',          col: 'PHONE',           type: 'tel' },
+  { id: 'ec-email',    label: 'Email',          col: 'EMAIL',           type: 'email' },
+  { id: 'ec-location', label: 'Location',       col: 'LOCATION',        type: 'text' },
+  { id: 'ec-address',  label: 'Address',        col: 'ADDRESS',         type: 'textarea' },
+  { id: 'ec-student',  label: 'Student Name',   col: 'STUDENT_NAME',    type: 'text' },
+  { id: 'ec-grade',    label: 'Student Grade',  col: 'STUDENT_GRADE',   type: 'select',
+    opts: ['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6',
+           'Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'] },
+  { id: 'ec-subjects', label: 'Subjects Needed',col: 'SUBJECTS_NEEDED', type: 'text' },
+  { id: 'ec-tutor',    label: 'Assigned Tutor', col: 'ASSIGNED_TUTOR',  type: 'text' },
+  { id: 'ec-notes',    label: 'Notes',          col: 'NOTES',           type: 'textarea' },
+];
+
+function openEditCardModal(sheetRow, uid) {
+  const ri = allRows.findIndex(r => r._sheetRow === sheetRow);
+  if (ri === -1) return;
+  const row    = allRows[ri];
+  const isTutor = currentSection === 'tutors';
+  const fields  = isTutor ? TUTOR_EDIT_FIELDS : PARENT_EDIT_FIELDS;
+  const schema  = isTutor ? C : CP;
+  const name    = isTutor ? cell(row, C.NAME) : cell(row, CP.NAME);
+
+  _editCardSheetRow = sheetRow;
+  _editCardSection  = currentSection;
+  _editCardRI       = ri;
+
+  document.getElementById('edit-card-title').textContent = `Edit — ${name}`;
+  document.getElementById('edit-card-modal').dataset.sheetRow = sheetRow;
+  document.getElementById('edit-card-modal').dataset.uid      = uid;
+
+  const body = document.getElementById('edit-card-body');
+  body.innerHTML = fields.map(f => {
+    const val = cell(row, schema[f.col]);
+    if (f.type === 'select') {
+      const opts = ['', ...f.opts].map(o =>
+        `<option value="${esc(o)}"${o === val ? ' selected' : ''}>${esc(o) || '—'}</option>`
+      ).join('');
+      return `<label class="modal-label">${f.label}</label><select id="${f.id}" class="modal-input">${opts}</select>`;
+    }
+    if (f.type === 'textarea') {
+      return `<label class="modal-label">${f.label}</label><textarea id="${f.id}" class="cal-desc-area" rows="2">${esc(val)}</textarea>`;
+    }
+    return `<label class="modal-label">${f.label}${f.hint ? `<span class="modal-hint"> — ${f.hint}</span>` : ''}</label><input id="${f.id}" class="modal-input" type="${f.type}" value="${esc(val)}" autocomplete="off">`;
+  }).join('');
+
+  document.getElementById('edit-card-modal').style.display = 'flex';
+}
+
+function closeEditCardModal() {
+  document.getElementById('edit-card-modal').style.display = 'none';
+}
+
+async function saveEditCard() {
+  const ri = _editCardRI;
+  if (ri === null || ri === -1) return;
+  const isTutor = _editCardSection === 'tutors';
+  const fields  = isTutor ? TUTOR_EDIT_FIELDS : PARENT_EDIT_FIELDS;
+  const schema  = isTutor ? C : CP;
+  const row     = allRows[ri];
+
+  const updates = [];
+  fields.forEach(f => {
+    const el  = document.getElementById(f.id);
+    if (!el) return;
+    const newVal = (f.type === 'select' || f.type === 'textarea') ? el.value : el.value.trim();
+    const oldVal = cell(row, schema[f.col]);
+    if (newVal !== oldVal) updates.push({ col: schema[f.col], val: newVal });
+  });
+
+  if (!updates.length) { closeEditCardModal(); return; }
+
+  showLoader();
+  try {
+    await Promise.all(updates.map(u => updateCell(_editCardSheetRow, u.col + 1, u.val)));
+    updates.forEach(u => { allRows[ri][u.col] = u.val; });
+    hideLoader();
+    closeEditCardModal();
+    showToast('Changes saved');
+    // Re-render the row by refreshing filters
+    applyFilters();
+  } catch (err) {
+    hideLoader();
+    showToast('Failed to save: ' + err.message, 'error');
+  }
+}
+
 async function trashCard(sheetRow, uid) {
   showConfirm('Move to bin?<br><span class="confirm-sub">Saved in Bin for 30 days, then permanently removed.</span>', () => _doTrashCard(sheetRow, uid));
 }
@@ -2085,13 +2472,16 @@ function showMoveModal(sheetRow, uid) {
     // In-Loop or Onboarded tab — offer removal only
     title = `Remove from ${cfg.label}`;
     optsHTML = `<button class="btn-move-opt" onclick="closeMoveModal();updateStatus(${sheetRow},'${uid}','')">Remove from ${cfg.label}</button>`;
-  } else if (!cfg.isBin) {
-    // All tab — offer "Add to" sub-tabs
+  } else if (!cfg.isBin && !cfg.isDraft) {
+    // All tab — offer "Add to" sub-tabs + Draft (tutors only)
     title = 'Add to…';
     const subTabs = SECTION_TABS[currentSection].filter(t => t.statusFilter);
     optsHTML = subTabs.map(t =>
       `<button class="btn-move-opt" onclick="closeMoveModal();updateStatus(${sheetRow},'${uid}','${t.statusFilter}')">${t.label}</button>`
     ).join('');
+    if (currentSection === 'tutors') {
+      optsHTML += `<button class="btn-move-opt btn-move-draft" onclick="closeMoveModal();moveToDraft(${sheetRow},'${uid}')">Draft</button>`;
+    }
   } else {
     // Bin — no move-modal (handled elsewhere)
     return;

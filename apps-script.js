@@ -77,7 +77,8 @@ const TARGET_TO_FORM = {
   "Expected Pay":           "How much pay are you expecting(be in specific per hour)",
   "Referral":               "Refer any friend who you think is best for this role(Name and their contact number)",
   "Open to Contact":        "Do you want us to contact you if any requirements? And do you want to work with us?",
-  "College / Work Timings": "Your college/work timings"
+  "College / Work Timings": "Your college/work timings",
+  "Source":                 "Where did you hear about us?"
 };
 
 
@@ -132,6 +133,16 @@ function syncSubmissionToTargetSheet(namedValues) {
 
     const appId = generateAppId(sheet);
     sheet.appendRow(buildTargetRow(namedValues, appId));
+
+    // Write "Source" to its own column (added separately from TARGET_HEADERS columns)
+    const lastCol = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+    const srcColIdx = headers.indexOf("Source");
+    if (srcColIdx !== -1) {
+      const sourceVal = getResponse(namedValues, "Where did you hear about us?");
+      sheet.getRange(sheet.getLastRow(), srcColIdx + 1).setValue(sourceVal === "—" ? "" : sourceVal);
+    }
+
     Logger.log("Synced to target sheet: " + appId);
   } finally {
     lock.releaseLock();
@@ -529,6 +540,76 @@ function fixDuplicateHeaders() {
 
   Logger.log("fixDuplicateHeaders complete.");
 }
+
+/**
+ * One-time: adds "Source" column to all Tutors tabs and backfills "Poster" for
+ * every existing row that has no Source value yet.
+ * Safe to re-run — skips any sheet that already has the column.
+ * After running, add SOURCE:29 to constants.js C object if not already done.
+ */
+function addSourceColumn() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const TUTOR_TABS = [
+    'Tutors (Applied)', 'Tutors (In-Loop)',
+    'Tutors (Onboarded)', 'Tutors (Bin)'
+  ];
+
+  TUTOR_TABS.forEach(tabName => {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) { Logger.log(`Sheet not found: ${tabName}`); return; }
+
+    const lastCol = sheet.getLastColumn();
+    const headers = lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim())
+      : [];
+
+    if (headers.includes('Source')) {
+      Logger.log(`"Source" already present in "${tabName}" — skipping.`);
+      return;
+    }
+
+    const newCol = lastCol + 1;
+    sheet.getRange(1, newCol).setValue('Source').setFontWeight('bold');
+    Logger.log(`Added "Source" column at col ${newCol} (0-based: ${newCol - 1}) in "${tabName}"`);
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const values = Array.from({ length: lastRow - 1 }, () => ['Poster']);
+      sheet.getRange(2, newCol, lastRow - 1, 1).setValues(values);
+      Logger.log(`Backfilled ${lastRow - 1} rows with "Poster" in "${tabName}"`);
+    }
+  });
+
+  Logger.log('addSourceColumn complete. Check the Logger output above for the 0-based column index to use in constants.js SOURCE field.');
+}
+
+
+/**
+ * One-time: creates the "Tutors (Draft)" sheet with the same headers as
+ * "Tutors (Applied)". Draft is a permanent holding area — no auto-purge.
+ * Safe to re-run — skips if the sheet already exists.
+ */
+function initDraftSheet() {
+  const ss = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+  const DRAFT_NAME = 'Tutors (Draft)';
+
+  if (ss.getSheetByName(DRAFT_NAME)) {
+    Logger.log(`"${DRAFT_NAME}" already exists — skipping.`);
+    return;
+  }
+
+  const applied = ss.getSheetByName('Tutors (Applied)');
+  if (!applied) { Logger.log('Tutors (Applied) not found — aborting'); return; }
+
+  const draft = ss.insertSheet(DRAFT_NAME);
+  const lastCol = applied.getLastColumn();
+  const headers = applied.getRange(1, 1, 1, lastCol).getValues()[0];
+  draft.getRange(1, 1, 1, headers.length).setValues([headers]);
+  draft.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  draft.setFrozenRows(1);
+  Logger.log(`"${DRAFT_NAME}" created with ${headers.length} columns.`);
+}
+
 
 /**
  * One-time: migrates all parent records from the source spreadsheet into

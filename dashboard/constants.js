@@ -14,6 +14,7 @@ const SHEETS = {
   TUTORS_APPLIED:     'Tutors (Applied)',
   TUTORS_IN_LOOP:     'Tutors (In-Loop)',
   TUTORS_ONBOARDED:   'Tutors (Onboarded)',
+  TUTORS_DRAFT:       'Tutors (Draft)',
   TUTORS_BIN:         'Tutors (Bin)',
   PARENTS_TO_CONTACT: 'Parents (To-Contact)',
   PARENTS_IN_LOOP:    'Parents (In-Loop)',
@@ -33,7 +34,8 @@ const C = {
   CALENDAR_EVENT_ID:26,
   STATUS:27,
   SCHEDULED_PARENT:28,
-  // Bin-only columns (DELETED_AT shares index 28 with SCHEDULED_PARENT — different sheets, never mixed)
+  SOURCE:29,
+  // Bin-only columns (DELETED_AT/ORIGINAL_TAB share indices with SCHEDULED_PARENT/SOURCE — different sheets, never mixed)
   DELETED_AT:28, ORIGINAL_TAB:29
 };
 
