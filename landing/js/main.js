@@ -74,6 +74,13 @@ function clearErrors() {
   phoneInput.classList.remove('invalid');
 }
 
+function normalizePhone(raw) {
+  let p = raw.trim().replace(/[\s\-]/g, '');
+  if (p.startsWith('+91')) p = p.slice(3);
+  else if (/^91[6-9]/.test(p) && p.length === 12) p = p.slice(2);
+  return p;
+}
+
 function validate() {
   clearErrors();
   let ok = true;
@@ -88,7 +95,7 @@ function validate() {
     ok = false;
   }
   const phonePattern = /^[6-9][0-9]{9}$/;
-  if (!phonePattern.test(phoneInput.value.trim())) {
+  if (!phonePattern.test(normalizePhone(phoneInput.value))) {
     phoneError.hidden = false;
     phoneInput.classList.add('invalid');
     ok = false;
@@ -127,7 +134,7 @@ form.addEventListener('submit', async e => {
   if (!validate()) return;
 
   const name  = nameInput.value.trim();
-  const phone = phoneInput.value.trim();
+  const phone = normalizePhone(phoneInput.value);
   const role  = form.querySelector('input[name="role"]:checked')?.value || '';
 
   // Loading state

@@ -419,10 +419,22 @@
         <p class="modal-sub">Leave your details and our team will reach out within the hour.</p>
         <form id="callbackForm" novalidate>
           <div class="form-field">
+            <label for="cb-name">Your Name</label>
+            <input id="cb-name" type="text" name="name" placeholder="e.g. Priya Sharma"
+                   autocomplete="name" required minlength="2" />
+            <span class="field-error" id="name-error" role="alert" hidden>Please enter your name.</span>
+          </div>
+          <div class="form-field">
+            <label for="cb-phone">Phone Number</label>
+            <input id="cb-phone" type="tel" name="phone" placeholder="e.g. 9876543210 or +91…"
+                   autocomplete="tel" required />
+            <span class="field-error" id="phone-error" role="alert" hidden>Enter a valid 10-digit Indian mobile number.</span>
+          </div>
+          <div class="form-field">
             <label class="modal-label">You are a</label>
             <div class="role-options" role="radiogroup" aria-label="Your role">
               <label class="role-opt">
-                <input type="radio" name="role" value="Parent" />
+                <input type="radio" name="role" value="Parent" checked />
                 <span>Parent</span>
               </label>
               <label class="role-opt">
@@ -435,18 +447,6 @@
               </label>
             </div>
             <span class="field-error" id="role-error" role="alert" hidden>Please select one.</span>
-          </div>
-          <div class="form-field">
-            <label for="cb-name">Your Name</label>
-            <input id="cb-name" type="text" name="name" placeholder="e.g. Priya Sharma"
-                   autocomplete="name" required minlength="2" />
-            <span class="field-error" id="name-error" role="alert" hidden>Please enter your name.</span>
-          </div>
-          <div class="form-field">
-            <label for="cb-phone">Phone Number</label>
-            <input id="cb-phone" type="tel" name="phone" placeholder="e.g. 9876543210"
-                   autocomplete="tel" required pattern="[6-9][0-9]{9}" />
-            <span class="field-error" id="phone-error" role="alert" hidden>Enter a valid 10-digit Indian mobile number.</span>
           </div>
           <button class="btn-primary form-submit" id="cbSubmitBtn" type="submit">
             <span id="cbBtnText">Request Callback</span>
