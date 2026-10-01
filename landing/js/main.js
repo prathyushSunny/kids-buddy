@@ -106,17 +106,10 @@ function validate() {
 async function sendToDiscord(name, phone, role) {
   const roleEmoji = { Parent: '👨‍👩‍👧', Student: '🎒', Teacher: '📚' }[role] || '❓';
   const payload = {
-    // Top-line summary — phone in a code span so it's one-tap selectable on mobile
-    content: `📲 \`${phone}\` · **${name}** · ${roleEmoji} ${role}`,
     embeds: [{
       title: '📞 New Callback Request — KiDS Buddy',
       color: 0x2563EB,
-      fields: [
-        { name: '🎭 Role',               value: `${roleEmoji} **${role}**`, inline: true },
-        { name: '👤 Name',               value: `**${name}**`,             inline: true },
-        // phone in a code block: one-click copy on desktop, tap-to-copy on mobile
-        { name: '📱 Phone — tap to copy', value: `\`\`\`\n${phone}\n\`\`\``, inline: false },
-      ],
+      description: `${roleEmoji} **${role}** · ${name}\n📱 \`${phone}\``,
       footer: { text: 'KiDS Buddy Landing · kidsbuddy.online' },
       timestamp: new Date().toISOString(),
     }],
