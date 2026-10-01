@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kids-buddy",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "dashboard"],
+      "port": 4242,
+      "autoPort": true
+    },
+    {
+      "name": "react-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "react-app", "run", "dev"],
+      "port": 3000,
+      "url": "http://localhost:3000"
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "landing", "-l", "4243"],
+      "port": 4243
+    }
+  ]
+}
