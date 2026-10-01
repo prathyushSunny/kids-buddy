@@ -1,5 +1,7 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import LandingPage from './pages/LandingPage';
 import SignIn from './pages/SignIn';
 import Dashboard from './pages/Dashboard';
 import Toast from './components/common/Toast';
@@ -15,19 +17,15 @@ import EditCardModal from './components/modals/EditCardModal';
 import AddParentModal from './components/modals/AddParentModal';
 import QuickMoveModal from './components/modals/QuickMoveModal';
 
-export default function App() {
+// CMS shell — auth-gated SignIn / Dashboard
+function CMSRoot() {
   const isAuthenticated = useSelector(s => s.auth.isAuthenticated);
   const isLoading       = useSelector(s => s.ui.loader);
-
   return (
     <>
       {isAuthenticated ? <Dashboard /> : <SignIn />}
-
-      {/* Global UI */}
       <Toast />
       {isLoading && <Loader />}
-
-      {/* Modals — always mounted, render nothing when closed */}
       <ConfirmModal />
       <ActionsModal />
       <InLoopModal />
@@ -39,5 +37,25 @@ export default function App() {
       <AddParentModal />
       <QuickMoveModal />
     </>
+  );
+}
+
+const isCMSDomain = typeof window !== 'undefined' &&
+  window.location.hostname.startsWith('cms.');
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* On cms.kidsbuddy.online, redirect root straight to /cms */}
+        <Route
+          path="/"
+          element={isCMSDomain ? <Navigate to="/cms" replace /> : <LandingPage />}
+        />
+        <Route path="/cms" element={<CMSRoot />} />
+        {/* Catch-all: unknown paths go home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
