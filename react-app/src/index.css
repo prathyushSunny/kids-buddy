@@ -109,3 +109,247 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+
+/* ── NOTES PAGE ─────────────────────────────────────────────────────────────── */
+.notes-page {
+  padding: 24px 0 60px;
+  max-width: 860px;
+}
+
+.notes-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.notes-heading {
+  margin: 0; font-size: 18px; font-weight: 700;
+  color: var(--text-h); letter-spacing: -.2px;
+}
+
+.notes-section-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text);
+  opacity: .45; margin: 28px 0 12px;
+}
+
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+/* ── Custom checkboxes (Slack-style rounded square) ── */
+.note-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .12s, border-color .12s;
+  background: transparent;
+  margin: 0;
+}
+.note-checkbox:hover { border-color: var(--accent); }
+.note-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.note-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 1px;
+  width: 5px; height: 9px;
+  border: 1.5px solid #fff;
+  border-top: none; border-left: none;
+  transform: rotate(45deg);
+}
+
+/* ── Note card ── */
+.note-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 16px 12px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: box-shadow .15s, border-color .15s;
+  position: relative;
+}
+.note-card:hover {
+  box-shadow: 0 2px 16px rgba(0,0,0,.08);
+  border-color: color-mix(in srgb, var(--border) 60%, var(--accent));
+}
+.note-pinned { border-color: var(--accent-border); background: var(--accent-bg); }
+
+/* pin dot badge on pinned cards */
+.note-pin-dot {
+  position: absolute; top: 12px; right: 12px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ── Card header ── */
+.note-card-header {
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.note-title {
+  flex: 1; font-size: 14px; font-weight: 700;
+  color: var(--text-h); cursor: pointer;
+  line-height: 1.4; word-break: break-word;
+  padding: 1px 0;
+}
+.note-title-placeholder { color: var(--text); opacity: .35; font-weight: 400; }
+.note-title-input {
+  flex: 1; font-size: 14px; font-weight: 700;
+  color: var(--text-h); background: transparent;
+  border: none; outline: none; font-family: inherit;
+  padding: 0; line-height: 1.4; width: 100%;
+}
+.note-pin-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--text); opacity: 0; padding: 2px 3px;
+  border-radius: 4px; transition: opacity .15s, color .15s, background .15s;
+  flex-shrink: 0; line-height: 1;
+}
+.note-card:hover .note-pin-btn { opacity: .45; }
+.note-pin-btn:hover, .note-pin-btn.active { opacity: 1 !important; color: var(--accent); }
+.note-pin-btn.active { background: var(--accent-bg); }
+
+/* ── Checklist items ── */
+.note-items { display: flex; flex-direction: column; gap: 2px; }
+
+.note-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 5px 6px; border-radius: 6px;
+  transition: background .1s;
+}
+.note-item:hover { background: var(--code-bg); }
+.note-item-checked .note-item-text {
+  text-decoration: line-through; opacity: .38;
+}
+
+.note-item-text {
+  flex: 1; font-size: 14px; line-height: 1.55;
+  color: var(--text-h); cursor: pointer; word-break: break-word;
+  padding-top: 1px;
+}
+.note-item-input {
+  flex: 1; font-size: 14px; line-height: 1.55;
+  color: var(--text-h); background: transparent;
+  border: none; outline: none; font-family: inherit;
+  padding: 0; min-width: 0;
+}
+.note-item-del {
+  background: none; border: none; cursor: pointer;
+  color: var(--text); opacity: 0; padding: 2px 3px;
+  border-radius: 4px; transition: opacity .15s, color .15s;
+  flex-shrink: 0; margin-top: 2px;
+}
+.note-item:hover .note-item-del { opacity: .4; }
+.note-item-del:hover { opacity: 1 !important; color: #ef4444; }
+
+.note-add-item {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; color: var(--text); opacity: .4;
+  padding: 5px 6px; border-radius: 6px;
+  font-family: inherit; transition: opacity .15s, background .1s;
+}
+.note-add-item:hover { opacity: .8; background: var(--code-bg); }
+
+.note-empty-items {
+  font-size: 13px; color: var(--text); opacity: .35;
+  padding: 4px 6px; cursor: pointer;
+}
+.note-empty-items:hover { opacity: .6; }
+
+/* ── Progress bar ── */
+.note-progress-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+.note-progress-bar {
+  flex: 1; height: 3px; border-radius: 2px;
+  background: var(--border); overflow: hidden;
+}
+.note-progress-fill {
+  height: 100%; border-radius: 2px;
+  background: var(--accent); transition: width .2s;
+}
+.note-progress-label {
+  font-size: 11px; color: var(--text); opacity: .5; white-space: nowrap;
+}
+
+/* ── Card footer ── */
+.note-card-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 4px; border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+.note-ts { font-size: 11px; color: var(--text); opacity: .35; }
+.note-footer-actions { display: flex; gap: 6px; }
+
+.note-btn {
+  font-size: 12px; font-weight: 600; padding: 5px 11px;
+  border-radius: 6px; cursor: pointer; border: none;
+  font-family: inherit; transition: background .12s, opacity .12s;
+  line-height: 1;
+}
+.note-btn-ghost {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.note-btn-ghost:hover { background: var(--code-bg); }
+.note-btn-danger {
+  background: transparent; color: #ef4444;
+  border: 1px solid transparent;
+  opacity: 0; transition: opacity .15s, background .12s;
+}
+.note-card:hover .note-btn-danger { opacity: .7; }
+.note-btn-danger:hover { opacity: 1 !important; background: rgba(239,68,68,.08); }
+.note-btn-primary {
+  background: var(--accent); color: #fff; border: 1px solid transparent;
+}
+.note-btn-primary:hover { opacity: .85; }
+
+/* ── Composer ("Take a note…") ── */
+.note-composer {
+  border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 24px; overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+.note-composer:focus-within {
+  box-shadow: 0 0 0 2px var(--accent-border);
+  border-color: var(--accent-border);
+}
+
+.note-composer-placeholder {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; cursor: pointer;
+  font-size: 14px; color: var(--text); opacity: .5;
+  transition: opacity .15s;
+}
+.note-composer-placeholder:hover { opacity: .8; }
+
+.note-composer-body { padding: 14px 16px 0; }
+.note-composer-title {
+  width: 100%; font-size: 15px; font-weight: 700;
+  color: var(--text-h); background: transparent;
+  border: none; outline: none; font-family: inherit;
+  padding: 0 0 10px; display: block;
+  border-bottom: 1px solid var(--border);
+}
+.note-composer-items { padding: 8px 0; display: flex; flex-direction: column; gap: 2px; }
+.note-composer-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border); margin-top: 6px;
+}
+
+/* ── Empty state ── */
+.notes-empty {
+  text-align: center; padding: 48px 20px;
+  color: var(--text); opacity: .4; font-size: 14px; line-height: 1.6;
+}
+.notes-empty-icon { font-size: 32px; margin-bottom: 10px; opacity: .5; }

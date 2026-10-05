@@ -3,8 +3,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { C, CP, SHEETS, DEV_MODE } from '../../constants';
 import { cellValue, updateCell } from '../../services/sheetsApi';
 import { closeInLoopModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
-import { updateRowInPlace as updateTutorRow } from '../../features/tutors/tutorsSlice';
-import { updateRowInPlace as updateParentRow } from '../../features/parents/parentsSlice';
+import { moveRowStatus as moveTutorStatus } from '../../features/tutors/tutorsSlice';
+import { moveRowStatus as moveParentStatus } from '../../features/parents/parentsSlice';
 
 export default function InLoopModal() {
   const dispatch    = useDispatch();
@@ -21,7 +21,7 @@ export default function InLoopModal() {
   const rows      = isParent ? parentRows : tutorRows;
   const statusCol = isParent ? CP.STATUS  : C.STATUS;
   const nameCol   = isParent ? CP.NAME    : C.NAME;
-  const updateFn  = isParent ? updateParentRow : updateTutorRow;
+  const moveFn    = isParent ? moveParentStatus : moveTutorStatus;
   const sheetName = sheet || SHEETS.TUTORS_APPLIED;
 
   const confirm = async () => {
@@ -29,20 +29,19 @@ export default function InLoopModal() {
     const row = rows.find(r => r[31] === sheetRow);
     if (!row) return;
     const personName = name || cellValue(row, nameCol);
-    dispatch(updateFn({ sheetRow, colIdx: statusCol, value: 'In-Loop' }));
     if (!DEV_MODE) {
       dispatch(showLoader());
       try {
         await updateCell(sheetName, sheetRow, statusCol + 1, 'In-Loop', token);
-        dispatch(showToast(`${personName} added to In-Loop`));
       } catch (err) {
-        dispatch(updateFn({ sheetRow, colIdx: statusCol, value: '' }));
+        dispatch(hideLoader());
         dispatch(showToast({ message: 'Failed to update status: ' + err.message, type: 'error' }));
+        return;
       }
       dispatch(hideLoader());
-    } else {
-      dispatch(showToast(`${personName} added to In-Loop`));
     }
+    dispatch(moveFn({ sheetRow, newStatus: 'In-Loop' }));
+    dispatch(showToast(`${personName} added to In-Loop`));
   };
 
   return (

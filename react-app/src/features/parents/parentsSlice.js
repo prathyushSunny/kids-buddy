@@ -61,10 +61,14 @@ export const fetchParentTabCounts = createAsyncThunk(
     if (DEV_MODE) return { bin: 0, draft: 0 };
     const { auth: { token } } = getState();
     try {
-      const [binCount, draftCount] = await Promise.all([
-        fetchRowCount(SHEETS.PARENTS_BIN,   token),
-        fetchRowCount(SHEETS.PARENTS_DRAFT, token),
+      const [binRes, draftRes] = await Promise.all([
+        fetchSheetRows(SHEETS.PARENTS_BIN,   'A2', 'D', token),
+        fetchSheetRows(SHEETS.PARENTS_DRAFT, 'A1', 'D', token),
       ]);
+      const binCount = (binRes.values || []).filter(r => r.length > 0).length;
+      let draftRows = (draftRes.values || []);
+      if (draftRows.length > 0 && draftRows[0][0] === 'Parent ID') draftRows = draftRows.slice(1);
+      const draftCount = draftRows.filter(r => r.length > 0).length;
       return { bin: binCount, draft: draftCount };
     } catch {
       return rejectWithValue('count fetch failed');
@@ -110,6 +114,13 @@ const parentsSlice = createSlice({
       const q = state.searchQuery.toLowerCase().trim();
       let rows = state.allRows;
 
+      // When on a status-filtered tab (In-Loop / Onboarded), keep only matching rows
+      // so that client-side status changes remove cards from the list immediately.
+      const currentCfg = SECTION_TABS.parents.find(t => t.key === state.currentTabKey);
+      if (currentCfg?.statusFilter) {
+        rows = rows.filter(r => (r[CP.STATUS] || '') === currentCfg.statusFilter);
+      }
+
       if (state.filterContacted !== 'all') {
         const want = state.filterContacted === 'yes' ? 'Yes' : 'No';
         rows = rows.filter(r => (r[CP.CONTACTED] || 'No') === want);
@@ -121,7 +132,7 @@ const parentsSlice = createSlice({
 
       if (q) {
         rows = rows.filter(r =>
-          [CP.NAME, CP.PHONE, CP.EMAIL, CP.LOCATION, CP.STUDENT_NAME].some(i =>
+          [CP.NAME, CP.PHONE, CP.EMAIL, CP.LOCATION, CP.STUDENT_NAME, CP.NOTES].some(i =>
             cellValue(r, i).toLowerCase().includes(q),
           ),
         );
@@ -129,11 +140,10 @@ const parentsSlice = createSlice({
 
       state.filteredRows = rows;
 
-      // Only recompute main-tab counts when allRows holds main-tab data (not bin/draft rows)
-      const onBinOrDraft = SECTION_TABS.parents.some(
-        t => (t.isBin || t.isDraft) && t.key === state.currentTabKey,
-      );
-      if (!onBinOrDraft) {
+      // Only recompute from allRows when on 'all' tab — status-filtered tabs (in_loop,
+      // onboarded) and bin/draft tabs load a subset into allRows, so counts can't be
+      // derived from it there. moveRowStatus adjusts counts directly on those tabs.
+      if (state.currentTabKey === 'all') {
         SECTION_TABS.parents.forEach(t => {
           if (t.statusFilter) {
             state.tabCounts[t.key] = state.allRows.filter(r => (r[CP.STATUS] || '') === t.statusFilter).length;
@@ -142,6 +152,22 @@ const parentsSlice = createSlice({
           }
         });
       }
+    },
+    moveRowStatus(state, { payload: { sheetRow, newStatus } }) {
+      const row = state.allRows.find(r => r[31] === sheetRow);
+      if (!row) return;
+      const prevStatus = row[CP.STATUS] || '';
+      row[CP.STATUS] = newStatus;
+      SECTION_TABS.parents.forEach(t => {
+        if (!t.statusFilter) return;
+        if (prevStatus === t.statusFilter && state.tabCounts[t.key] !== undefined) {
+          state.tabCounts[t.key] = Math.max(0, (state.tabCounts[t.key] || 1) - 1);
+        }
+        if (newStatus === t.statusFilter && state.tabCounts[t.key] !== undefined) {
+          state.tabCounts[t.key] = (state.tabCounts[t.key] || 0) + 1;
+        }
+      });
+      parentsSlice.caseReducers._applyFilter(state);
     },
     updateRowInPlace(state, { payload }) {
       const { sheetRow, colIdx, value } = payload;
@@ -215,7 +241,7 @@ const parentsSlice = createSlice({
 export const {
   setTabKey, setSearchQuery, setFilterContacted,
   setFilterLocs, clearChipFilters,
-  updateRowInPlace, removeRow, addRow, setCache,
+  moveRowStatus, updateRowInPlace, removeRow, addRow, setCache,
   incrementTabCount, decrementTabCount,
 } = parentsSlice.actions;
 

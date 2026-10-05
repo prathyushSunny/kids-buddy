@@ -73,23 +73,30 @@ export default function CalendarPromptModal() {
       const existingId = row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '';
 
       let calId;
+      let meetLink = '';
       const body = buildCalendarBody(tutorName, tutorEmail, dateStr, desc, eventName);
       if (existingId) {
-        await updateCalendarEvent(existingId, body, token);
+        const res = await updateCalendarEvent(existingId, body, token);
         calId = existingId;
+        meetLink = res?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || '';
       } else {
         const res = await createCalendarEvent(body, token);
         calId = res.id;
+        meetLink = res?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || '';
       }
 
       if (calId) {
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.CALENDAR_EVENT_ID, value: calId }));
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, calId, token);
       }
+      if (meetLink) {
+        dispatch(updateRowInPlace({ sheetRow, colIdx: C.MEET_LINK, value: meetLink }));
+        await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.MEET_LINK + 1, meetLink, token);
+      }
 
       dispatch(hideLoader());
       close();
-      dispatch(showToast('Calendar event created'));
+      dispatch(showToast(meetLink ? `Calendar event created · Meet link saved` : 'Calendar event created'));
     } catch (err) {
       dispatch(hideLoader());
       close();

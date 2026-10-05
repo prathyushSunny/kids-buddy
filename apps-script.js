@@ -1214,3 +1214,48 @@ function createPurgeTrigger() {
 
   Logger.log('Daily purgeBin trigger created (runs at midnight every day).');
 }
+
+
+// ─── NOTES TAB SETUP ─────────────────────────────────────────────────────────
+// Run createNotesTab() once from the Apps Script editor.
+// Creates the "Notes" tab with headers in both Staging and Prod if not present.
+
+const NOTES_HEADERS = [
+  "Note ID", "Created At", "Updated At", "Author",
+  "Title", "Items", "Pinned", "Status",
+];
+
+function createNotesTab() {
+  const targets = {
+    staging: STAGING_SPREADSHEET_ID,
+    prod:    TARGET_SPREADSHEET_ID,
+  };
+
+  Object.entries(targets).forEach(([env, id]) => {
+    const ss = SpreadsheetApp.openById(id);
+    if (ss.getSheetByName("Notes")) {
+      Logger.log(`Notes tab already exists in ${env} — skipping.`);
+      return;
+    }
+    const sheet = ss.insertSheet("Notes");
+    sheet.appendRow(NOTES_HEADERS);
+
+    const hdrRange = sheet.getRange(1, 1, 1, NOTES_HEADERS.length);
+    hdrRange.setFontWeight("bold");
+    hdrRange.setBackground("#e8f0fe");
+    sheet.setFrozenRows(1);
+
+    sheet.setColumnWidth(1, 110); // Note ID
+    sheet.setColumnWidth(2, 160); // Created At
+    sheet.setColumnWidth(3, 160); // Updated At
+    sheet.setColumnWidth(4, 200); // Author
+    sheet.setColumnWidth(5, 200); // Title
+    sheet.setColumnWidth(6, 440); // Items (JSON)
+    sheet.setColumnWidth(7,  80); // Pinned
+    sheet.setColumnWidth(8, 100); // Status
+
+    Logger.log(`Created Notes tab in ${env} (${id})`);
+  });
+
+  Logger.log("createNotesTab complete.");
+}

@@ -31,6 +31,27 @@ export const SHEETS = {
   PARENTS_ONBOARDED:  'Parents (Onboarded)',
   PARENTS_DRAFT:      'Parents (Draft)',
   PARENTS_BIN:        'Parents (Bin)',
+  NOTES:              'Notes',
+};
+
+// Canonical tutor location options (used in filter + form dropdown)
+export const SOURCE_LOCATIONS = [
+  'Financial District',
+  'Gachibowli',
+  'Gandipet',
+  'Gowlidoddy',
+  'Kokapet',
+  'Manikonda',
+  'Nallagandla',
+  'Nanakramguda',
+  'Narsingi',
+  'Tellapur',
+];
+
+// 0-based column indices — Notes
+export const CN = {
+  NOTE_ID: 0, CREATED_AT: 1, UPDATED_AT: 2, AUTHOR: 3,
+  TITLE: 4, ITEMS: 5, PINNED: 6, STATUS: 7,
 };
 
 // 0-based column indices — Tutors
@@ -45,8 +66,10 @@ export const C = {
   CALENDAR_EVENT_ID:26,
   STATUS:27,
   SCHEDULED_PARENT:28,
-  _UNUSED_COL_29:29,
+  MEET_LINK:29,
   SOURCE:30,
+  // index 31 is synthetic (sheet row number, set in thunk)
+  SCHEDULES:32,  // column AG — JSON array of all schedule entries
   DELETED_AT:28, ORIGINAL_TAB:29,
 };
 
@@ -97,7 +120,7 @@ export const TUTOR_EDIT_FIELDS = [
   { id: 'ec-phone',     label: 'Phone',                  col: 'PHONE',     type: 'tel' },
   { id: 'ec-email',     label: 'Email',                  col: 'EMAIL',     type: 'email' },
   { id: 'ec-college',   label: 'College / Company',      col: 'COLLEGE',   type: 'text' },
-  { id: 'ec-location',  label: 'Stay Location',          col: 'LOCATION',  type: 'text' },
+  { id: 'ec-location',  label: 'Stay Location',          col: 'LOCATION',  type: 'select', opts: SOURCE_LOCATIONS },
   { id: 'ec-student',   label: 'Student or Working',     col: 'STUDENT',   type: 'select', opts: ['Student', 'Working'] },
   { id: 'ec-travel',    label: 'Travel Mode',            col: 'TRAVEL',    type: 'select', opts: ['Bike', 'Bus', 'Own vehicle', 'Public transport', 'Walk'] },
   { id: 'ec-classes',   label: 'Classes',                col: 'CLASSES',   type: 'multicheck', opts: ['0-5', '6-8', '8-10', 'Other'] },

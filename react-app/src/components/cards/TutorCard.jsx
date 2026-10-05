@@ -1,17 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { C, SHEETS, SOURCE_OPTIONS, DEV_MODE } from '../../constants';
+import { C, CP, SHEETS, SOURCE_OPTIONS, DEV_MODE } from '../../constants';
 import NotesSection from '../common/NotesSection';
-import { cellValue, normalizePhone, updateCell, appendRow, deleteRow, getSheetIds } from '../../services/sheetsApi';
+import { cellValue, normalizePhone, updateCell, appendRow, deleteRow, getSheetIds, deleteCalendarEvent } from '../../services/sheetsApi';
 import { formatDate, nowSheetFmt } from '../../utils/dateUtils';
 import { setConfirmCallback } from '../../utils/confirmService';
 import {
   toggleUidSelection, showToast, showLoader, hideLoader,
   openConfirmModal, openActionsModal, openEditCardModal,
-  openScheduleModal, openInLoopModal, openWAShareModal,
+  openScheduleTypeModal, openScheduleModal, openInterviewScheduleModal,
+  openWAShareModal, openContactFollowUpModal,
   openCalPromptModal, openPostRejectionModal,
 } from '../../features/ui/uiSlice';
 import { updateRowInPlace, removeRow, incrementTabCount } from '../../features/tutors/tutorsSlice';
+import { loadParents } from '../../features/parents/parentsSlice';
 
 // ── SVGs (matching vanilla) ───────────────────────────────────────────────────
 const HAMBURGER = (
@@ -62,6 +64,14 @@ const COPY_SVG = (
   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <rect x="9" y="9" width="13" height="13" rx="2"/>
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+  </svg>
+);
+const SAVE_CONTACT_SVG = (
+  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <line x1="19" y1="8" x2="19" y2="14"/>
+    <line x1="22" y1="11" x2="16" y2="11"/>
   </svg>
 );
 const NOTE_SVG = (
@@ -192,66 +202,180 @@ function SourceChip({ value, sheetRow, onUpdate }) {
   );
 }
 
-// ── Interview Section ─────────────────────────────────────────────────────────
-function InterviewSection({ row, sheetRow, onUpdate }) {
-  const dispatch = useDispatch();
-  const token    = useSelector(s => s.auth.token);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function parseSchedules(raw) {
+  try { return JSON.parse(raw || '[]') || []; } catch { return []; }
+}
 
-  const status    = cellValue(row, C.INTERVIEW_STATUS);
-  const ivAt      = cellValue(row, C.INTERVIEW_AT);
-  const calId     = cellValue(row, C.CALENDAR_EVENT_ID);
-  const rawParent = cellValue(row, C.SCHEDULED_PARENT);
+function dateDiff(atStr) {
+  try {
+    const d   = new Date(atStr.replace(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/, '$3-$2-$1T$4:$5'));
+    const now = new Date();
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dDay  = new Date(d); dDay.setHours(0,0,0,0);
+    const diff  = Math.round((dDay - today) / 86400000);
+    return { isPast: d < now, diff };
+  } catch { return { isPast: false, diff: 0 }; }
+}
 
-  const openSchedule = (e) => {
-    e.stopPropagation();
-    dispatch(openScheduleModal({ sheetRow, uid: String(sheetRow), current: ivAt }));
+// ── Schedule Section (multi-schedule: interview + visit) ──────────────────────
+function ScheduleSection({ row, sheetRow, onUpdate }) {
+  const dispatch      = useDispatch();
+  const token         = useSelector(s => s.auth.token);
+  const parentRows    = useSelector(s => s.parents.allRows);
+  const parentsLoading= useSelector(s => s.parents.isLoading);
+  const [expandedParents, setExpandedParents] = useState(new Set());
+
+  const legacyStatus = cellValue(row, C.INTERVIEW_STATUS);
+  const legacyAt     = cellValue(row, C.INTERVIEW_AT);
+  const legacyParent = cellValue(row, C.SCHEDULED_PARENT);
+  const legacyCalId  = cellValue(row, C.CALENDAR_EVENT_ID);
+
+  const schedulesRaw = cellValue(row, C.SCHEDULES);
+  const schedules    = parseSchedules(schedulesRaw);
+
+  const legacySynth = (!schedules.length && legacyAt)
+    ? [{ id: '__legacy__', type: 'visit', at: legacyAt, parent: legacyParent, calId: legacyCalId }]
+    : [];
+
+  const toMs = (atStr) => {
+    try { return new Date(atStr.replace(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/, '$3-$2-$1T$4:$5')).getTime(); }
+    catch { return 0; }
   };
 
-  const confirmCancel = (e) => {
+  // Cleared visits are hidden from schedule display but shown in Onboarded Students
+  const onboardedVisits  = schedules.filter(s => s.type === 'visit' && s.status === 'cleared');
+  const displaySchedules = [...legacySynth, ...schedules.filter(s => !s.status)]
+    .sort((a, b) => toMs(a.at) - toMs(b.at));
+
+  useEffect(() => {
+    if (onboardedVisits.length && !parentRows.length && !parentsLoading) {
+      dispatch(loadParents({ tabKey: 'all' }));
+    }
+  }, [onboardedVisits.length]);
+
+  const openTypePicker = (e) => {
     e.stopPropagation();
+    dispatch(openScheduleTypeModal({
+      sheetRow, uid: String(sheetRow),
+      tutorName:  cellValue(row, C.NAME),
+      tutorEmail: cellValue(row, C.EMAIL),
+    }));
+  };
+
+  const openChange = (e, entry) => {
+    e.stopPropagation();
+    if (entry.type === 'interview') {
+      dispatch(openInterviewScheduleModal({
+        sheetRow, uid: String(sheetRow),
+        tutorName:  cellValue(row, C.NAME),
+        tutorEmail: cellValue(row, C.EMAIL),
+        scheduleId: entry.id,
+        current:    entry.at,
+      }));
+    } else {
+      dispatch(openScheduleModal({
+        sheetRow, uid: String(sheetRow),
+        current:    entry.at,
+        scheduleId: entry.id === '__legacy__' ? null : entry.id,
+      }));
+    }
+  };
+
+  const openShareWA = (e, entry) => {
+    e.stopPropagation();
+    const name  = cellValue(row, C.NAME);
+    const phone = cellValue(row, C.PHONE);
+    if (entry.type === 'interview') {
+      dispatch(openWAShareModal({
+        type: 'interview', tutorName: name, tutorPhone: phone,
+        tutorEmail: cellValue(row, C.EMAIL),
+        dateStr: entry.at, meetLink: entry.meetLink || '',
+        sheetRow, existingCalId: entry.calId || '',
+      }));
+    } else {
+      const [pName, pPhone, pStudent, pAddress] = (entry.parent || '').split('|');
+      dispatch(openWAShareModal({
+        type: 'visit', tutorName: name, tutorPhone: phone,
+        dateStr: entry.at,
+        parentName: pName || '', parentPhone: pPhone || '',
+        studentName: pStudent || '', parentAddress: pAddress || '',
+        sheetRow, existingCalId: entry.calId || '',
+      }));
+    }
+  };
+
+  const openBlockCal = (e, entry) => {
+    e.stopPropagation();
+    const [pName, , pStudent, pAddress] = (entry.parent || '').split('|');
+    dispatch(openCalPromptModal({
+      sheetRow, tutorName: cellValue(row, C.NAME),
+      tutorEmail: cellValue(row, C.EMAIL), dateStr: entry.at,
+      parentName: pName || '', studentName: pStudent || '', parentAddress: pAddress || '',
+    }));
+  };
+
+  const confirmCancelEntry = (e, entry) => {
+    e.stopPropagation();
+    const isLegacy = entry.id === '__legacy__';
+    const msg = entry.type === 'interview' ? 'Cancel this interview?' : 'Cancel this scheduled visit?';
     setConfirmCallback(async () => {
       if (!DEV_MODE) {
         dispatch(showLoader());
         try {
-          await Promise.all([
-            updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_STATUS + 1, '', token),
-            updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_AT + 1, '', token),
-            updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULED_PARENT + 1, '', token),
-            updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, '', token),
-          ]);
-        } catch {}
+          if (entry.calId && entry.type === 'interview') {
+            await deleteCalendarEvent(entry.calId, token).catch(() => {});
+          }
+          if (isLegacy || entry.type === 'visit') {
+            await Promise.all([
+              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_STATUS + 1, '', token),
+              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_AT + 1, '', token),
+              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULED_PARENT + 1, '', token),
+              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, '', token),
+            ]);
+          }
+          if (!isLegacy) {
+            const updated = schedules.filter(s => s.id !== entry.id);
+            await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token);
+            onUpdate(C.SCHEDULES, JSON.stringify(updated));
+          }
+        } catch { /* silent */ }
         dispatch(hideLoader());
       }
-      onUpdate(C.INTERVIEW_STATUS, '');
-      onUpdate(C.INTERVIEW_AT, '');
-      onUpdate(C.SCHEDULED_PARENT, '');
-      onUpdate(C.CALENDAR_EVENT_ID, '');
-    });
-    dispatch(openConfirmModal({ message: 'Cancel this scheduled visit?' }));
-  };
-
-  const markResult = async (result, e) => {
-    e.stopPropagation();
-    if (!DEV_MODE) {
-      dispatch(showLoader());
-      try {
-        await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_STATUS + 1, result, token);
-      } catch { dispatch(hideLoader()); return; }
-      dispatch(hideLoader());
-    }
-    onUpdate(C.INTERVIEW_STATUS, result);
-    if (result === 'Cleared') {
-      // Also update status to Onboarded
-      if (!DEV_MODE) {
-        try { await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.STATUS + 1, 'Onboarded', token); } catch {}
+      if (isLegacy || entry.type === 'visit') {
+        onUpdate(C.INTERVIEW_STATUS, '');
+        onUpdate(C.INTERVIEW_AT, '');
+        onUpdate(C.SCHEDULED_PARENT, '');
+        onUpdate(C.CALENDAR_EVENT_ID, '');
       }
-      onUpdate(C.STATUS, 'Onboarded');
-    } else {
-      dispatch(openPostRejectionModal({ sheetRow, uid: String(sheetRow) }));
+    });
+    dispatch(openConfirmModal({ message: msg }));
+  };
+
+  const markEntryStatus = (e, entry, status) => {
+    e.stopPropagation();
+    const updated = (status === 'cleared' && entry.type === 'visit')
+      ? schedules.map(s => s.id === entry.id ? { ...s, status: 'cleared' } : s)
+      : schedules.filter(s => s.id !== entry.id);
+    onUpdate(C.SCHEDULES, JSON.stringify(updated));
+    if (!DEV_MODE) {
+      updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token).catch(() => {});
     }
   };
 
-  const header = (
+  const toggleParentExpand = (e, entryId) => {
+    e.stopPropagation();
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(entryId)) next.delete(entryId); else next.add(entryId);
+      return next;
+    });
+  };
+
+  const findParentRow = (phone) =>
+    parentRows.find(r => (r[CP.PHONE] || '').replace(/\D/g, '') === (phone || '').replace(/\D/g, ''));
+
+  const scheduleHeader = (
     <div className="card-section-header">
       <span className="cs-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
         {CALENDAR_SVG} Schedule
@@ -259,119 +383,154 @@ function InterviewSection({ row, sheetRow, onUpdate }) {
     </div>
   );
 
-  if (status === 'Cleared') {
+  if (!schedules.length && (legacyStatus === 'Cleared' || legacyStatus === 'Rejected')) {
     return (
       <div className="card-interview card-section">
-        {header}
+        {scheduleHeader}
         <div className="card-section-body">
-          <span className="iv-chip iv-cleared">Interview Cleared</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'Rejected') {
-    return (
-      <div className="card-interview card-section">
-        {header}
-        <div className="card-section-body">
-          <span className="iv-chip iv-rejected">Interview Rejected</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'Scheduled' && ivAt) {
-    const d    = (() => { try { return new Date(ivAt.replace(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/, '$3-$2-$1T$4:$5')); } catch { return new Date(); } })();
-    const now  = new Date();
-    const isPast = d < now;
-    const dateLbl = formatDate(ivAt);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const dDay  = new Date(d); dDay.setHours(0,0,0,0);
-    const diff  = Math.round((dDay - today) / 86400000);
-    const daysLbl = diff <= 0 ? '' : diff === 1 ? 'Tomorrow' : `in ${diff} days`;
-
-    let parentData = null;
-    if (rawParent) {
-      const [pName, pPhone, pStudent, pAddress] = rawParent.split('|');
-      if (pName) parentData = { name: pName, phone: pPhone || '', studentName: pStudent || '', address: pAddress || '' };
-    }
-
-    if (isPast) {
-      return (
-        <div className="card-interview card-section">
-          <div className="iv-past-alert">
-            <span className="iv-past-msg">Interview on {dateLbl} — cleared?</span>
-            <div className="iv-past-actions">
-              <button className="btn-iv-result yes" onClick={e => markResult('Cleared', e)}>Yes, Cleared</button>
-              <button className="btn-iv-result no" onClick={e => markResult('Rejected', e)}>No, Rejected</button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    const openWA = (e) => {
-      e.stopPropagation();
-      const name = cellValue(row, C.NAME);
-      const phone = normalizePhone(cellValue(row, C.PHONE));
-      dispatch(openWAShareModal({
-        tutorName: name, tutorPhone: phone, dateStr: ivAt,
-        parentName: parentData?.name || '',
-        parentPhone: parentData?.phone || '',
-        studentName: parentData?.studentName || '',
-        parentAddress: parentData?.address || '',
-        sheetRow,
-      }));
-    };
-
-    const openCal = (e) => {
-      e.stopPropagation();
-      dispatch(openCalPromptModal({
-        sheetRow,
-        tutorName: cellValue(row, C.NAME),
-        tutorEmail: cellValue(row, C.EMAIL),
-        dateStr: ivAt,
-        studentName: parentData?.studentName || '',
-        parentName: parentData?.name || '',
-        parentAddress: parentData?.address || '',
-      }));
-    };
-
-    return (
-      <div className="card-interview card-section">
-        {header}
-        <div className="card-section-body">
-          <div className="iv-date">
-            <span>{dateLbl}</span>
-            {daysLbl && <span className="iv-days-lbl">{daysLbl}</span>}
-          </div>
-          {parentData && (
-            <div className="iv-parent-tag">
-              With {parentData.name}{parentData.studentName ? ` & ${parentData.studentName}` : ''} · {parentData.phone}
-            </div>
-          )}
-          <div className="iv-actions">
-            <button className="btn-iv-action" onClick={openSchedule}>{PENCIL} Change</button>
-            <button className="btn-iv-action" onClick={confirmCancel}>{CLOSE_SVG} Cancel</button>
-            <button className="btn-iv-action btn-iv-wa" onClick={openWA}>{WA_SVG} Share</button>
-            {calId
-              ? <span className="iv-cal-blocked">{GCAL_SVG} Blocked in Calendar</span>
-              : <button className="btn-iv-action" onClick={openCal}>{GCAL_SVG} Block Calendar</button>
-            }
-          </div>
+          <button className="btn-inline-text" onClick={openTypePicker}>+ Schedule</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="card-interview card-section">
-      {header}
-      <div className="card-section-body">
-        <button className="btn-inline-text" onClick={openSchedule}>+ Schedule a Visit</button>
+    <>
+      <div className="card-interview card-section">
+        {scheduleHeader}
+        <div className="card-section-body">
+          {displaySchedules.map(entry => {
+            const { isPast, diff } = dateDiff(entry.at);
+            const dateLbl = formatDate(entry.at);
+            const daysLbl = diff <= 0 ? '' : diff === 1 ? 'Tomorrow' : `in ${diff} days`;
+            const isInterview = entry.type === 'interview';
+            const isLegacy = entry.id === '__legacy__';
+            const [pName, pPhone, pStudent] = (entry.parent || '').split('|');
+            const hasParent = !!pName;
+            const showPrompt = isPast && !isLegacy;
+
+            return (
+              <div key={entry.id} className="sched-entry">
+                <div className="sched-entry-header">
+                  <span className={`sched-type-tag ${isInterview ? 'tag-interview' : 'tag-visit'}`}>
+                    {isInterview ? 'Interview' : 'Visit'}
+                  </span>
+                </div>
+                <div className="iv-date">
+                  <span>{dateLbl}</span>
+                  {daysLbl && <span className="iv-days-lbl">{daysLbl}</span>}
+                </div>
+                {hasParent && (
+                  <div className="iv-parent-tag">
+                    With {pName}{pStudent ? ` & ${pStudent}` : ''}{pPhone ? ` · ${pPhone}` : ''}
+                  </div>
+                )}
+                {showPrompt ? (
+                  <div className="sched-cleared-prompt">
+                    <span>Was this {isInterview ? 'interview' : 'visit'} completed?</span>
+                    <div className="sched-prompt-actions">
+                      <button className="btn-prompt-cleared" onClick={e => markEntryStatus(e, entry, 'cleared')}>Cleared ✓</button>
+                      <button className="btn-prompt-rejected" onClick={e => markEntryStatus(e, entry, 'rejected')}>Rejected ✗</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="iv-actions">
+                    <button className="btn-iv-action" onClick={e => openChange(e, entry)}>{PENCIL} Change</button>
+                    <button className="btn-iv-action" onClick={e => confirmCancelEntry(e, entry)}>{CLOSE_SVG} Cancel</button>
+                    {isInterview && entry.meetLink && (
+                      <a className="btn-iv-action" href={entry.meetLink} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                        {GCAL_SVG} Join Meet
+                      </a>
+                    )}
+                    <button className="btn-iv-action btn-iv-wa" onClick={e => openShareWA(e, entry)}>{WA_SVG} Share</button>
+                    {!isInterview && (
+                      entry.calId
+                        ? <span className="iv-cal-blocked">{GCAL_SVG} In Calendar</span>
+                        : <button className="btn-iv-action" onClick={e => openBlockCal(e, entry)}>{GCAL_SVG} Block Calendar</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button className="btn-inline-text sched-add-btn" onClick={openTypePicker}>+ Schedule</button>
+        </div>
       </div>
-    </div>
+
+      {onboardedVisits.length > 0 && (
+        <div className="card-section">
+          <div className="card-section-header">
+            <span className="cs-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {USER_SVG} Onboarded Students
+            </span>
+          </div>
+          <div className="card-section-body">
+            {onboardedVisits.map(entry => {
+              const [pName, pPhone, pStudent] = (entry.parent || '').split('|');
+              const isExpanded = expandedParents.has(entry.id);
+              const fullParent = findParentRow(pPhone);
+              return (
+                <div key={entry.id} className="onboarded-student-row">
+                  <div className="onboarded-student-info">
+                    <span className="onboarded-arrow">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 2l4 4-4 4"/>
+                      </svg>
+                    </span>
+                    <span className="onboarded-name">{pStudent || pName}</span>
+                    {pStudent && pName && <span className="onboarded-sub"> · {pName}</span>}
+                    {pPhone && <span className="onboarded-sub"> · {pPhone}</span>}
+                  </div>
+                  <div className="onboarded-student-actions">
+                    <button className="btn-inline-text" style={{ fontSize: 12 }}
+                      onClick={e => toggleParentExpand(e, entry.id)}>
+                      {isExpanded ? 'Hide info ▴' : 'Show full info ▾'}
+                    </button>
+                    <button
+                      className="btn-deboard"
+                      onClick={e => {
+                        e.stopPropagation();
+                        setConfirmCallback(async () => {
+                          const updated = schedules.filter(s => s.id !== entry.id);
+                          onUpdate(C.SCHEDULES, JSON.stringify(updated));
+                          // Clear legacy columns so legacySynth doesn't resurrect the entry
+                          onUpdate(C.INTERVIEW_STATUS, '');
+                          onUpdate(C.INTERVIEW_AT, '');
+                          onUpdate(C.SCHEDULED_PARENT, '');
+                          onUpdate(C.CALENDAR_EVENT_ID, '');
+                          if (!DEV_MODE) {
+                            await Promise.all([
+                              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token),
+                              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_STATUS + 1, '', token),
+                              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_AT + 1, '', token),
+                              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULED_PARENT + 1, '', token),
+                              updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, '', token),
+                            ]).catch(() => {});
+                          }
+                        });
+                        dispatch(openConfirmModal({ message: `Deboard ${pStudent || pName}?` }));
+                      }}
+                    >
+                      ✕ Deboard
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="onboarded-full-info">
+                      {pPhone  && <div><span className="ofi-label">Phone</span> {pPhone}</div>}
+                      {(entry.parent || '').split('|')[3] && <div><span className="ofi-label">Address</span> {entry.parent.split('|')[3]}</div>}
+                      {fullParent && fullParent[CP.STUDENT_GRADE]   && <div><span className="ofi-label">Grade</span> {fullParent[CP.STUDENT_GRADE]}</div>}
+                      {fullParent && fullParent[CP.SUBJECTS_NEEDED] && <div><span className="ofi-label">Subjects</span> {fullParent[CP.SUBJECTS_NEEDED]}</div>}
+                      {fullParent && fullParent[CP.EMAIL]           && <div><span className="ofi-label">Email</span> {fullParent[CP.EMAIL]}</div>}
+                      {fullParent && fullParent[CP.NOTES]           && <div><span className="ofi-label">Notes</span> {fullParent[CP.NOTES]}</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -425,6 +584,7 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
   const workhours = cellValue(row, C.WORKHOURS);
   const classes   = cellValue(row, C.CLASSES);
   const student   = cellValue(row, C.STUDENT);
+  const meetLink  = cellValue(row, C.MEET_LINK);
 
   const badgeClass = status === 'In-Loop' ? 'badge-inloop' : status === 'Onboarded' ? 'badge-onboarded' : 'badge-hidden';
   const waMsg  = `Hello ${name}, I'm contacting you regarding your submission for KidsBuddy home tuitions.`;
@@ -460,18 +620,12 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
     }
   };
 
-  // ── handleCommunicationTap — auto-marks contacted + prompts In-Loop ────────
-  const handleCommunicationTap = async () => {
-    if (contacted !== 'Yes') {
-      updateLocal(C.CONTACTED, 'Yes');
-      if (!DEV_MODE) {
-        try { await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CONTACTED + 1, 'Yes', token); }
-        catch { updateLocal(C.CONTACTED, contacted); }
-      }
-    }
-    if (status !== 'In-Loop') {
-      dispatch(openInLoopModal({ sheetRow, uid, name }));
-    }
+  // ── handleCommunicationTap — opens contact follow-up flow (only if not yet contacted) ──
+  const handleCommunicationTap = () => {
+    if (contacted === 'Yes') return;
+    dispatch(openContactFollowUpModal({
+      sheetRow, uid, name, section: 'tutors', sheet: SHEETS.TUTORS_APPLIED,
+    }));
   };
 
   // ── logCall ────────────────────────────────────────────────────────────────
@@ -489,6 +643,28 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
     if (!digits) return;
     navigator.clipboard.writeText(digits)
       .then(() => dispatch(showToast('Copied')));
+  };
+
+  // ── Save contact (vCard) ───────────────────────────────────────────────────
+  const saveContact = (e) => {
+    e.stopPropagation();
+    const email = cellValue(row, C.EMAIL) || '';
+    const vcf = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${name}`,
+      `TEL;TYPE=CELL:${digits ? `+91${digits}` : ''}`,
+      email ? `EMAIL:${email}` : '',
+      'END:VCARD',
+    ].filter(Boolean).join('\r\n');
+    const blob = new Blob([vcf], { type: 'text/vcard' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${name}.vcf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    dispatch(showToast(`${name} saved to contacts`));
   };
 
   // ── Trash ──────────────────────────────────────────────────────────────────
@@ -555,12 +731,17 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
           {COPY_SVG}
         </button>
       )}
+      {digits && (
+        <button className="icon-copy" title="Save contact" onClick={saveContact}>
+          {SAVE_CONTACT_SVG}
+        </button>
+      )}
     </span>
   );
 
   return (
     <>
-      <tr ref={cardRef} className={`data-row${expanded ? ' expanded' : ''}`} onClick={() => onExpand(uid)}>
+      <tr ref={cardRef} className={`data-row${expanded ? ' expanded' : ''}`}>
         {/* td-id */}
         <td className="td-id">{appId}</td>
 
@@ -610,7 +791,7 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
           </div>
 
           {/* Interview section */}
-          <InterviewSection row={row} sheetRow={sheetRow} onUpdate={updateLocal} />
+          <ScheduleSection row={row} sheetRow={sheetRow} onUpdate={updateLocal} />
 
           {/* Notes section */}
           <NotesSection
@@ -681,29 +862,32 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
         </td>
       </tr>
 
-      {/* Detail row */}
-      {expanded && (
-        <tr className="detail-row open" id={`detail-${uid}`}>
-          <td colSpan="8">
-            <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-              {submitted && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Submitted</div><div style={{ fontSize: 13 }}>{formatDate(submitted)}</div></div>}
-              {email     && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Email</div><div style={{ fontSize: 13 }}>{email}</div></div>}
-              {student   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student / Working</div><div style={{ fontSize: 13 }}>{student}</div></div>}
-              {college   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>College / Company</div><div style={{ fontSize: 13 }}>{college}</div></div>}
-              {location  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Stay Location</div><div style={{ fontSize: 13 }}>{location}</div></div>}
-              {travel    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Travel Mode</div><div style={{ fontSize: 13 }}>{travel}</div></div>}
-              {subjects  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Subjects</div><div style={{ fontSize: 13 }}>{subjects}</div></div>}
-              {languages && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Languages</div><div style={{ fontSize: 13 }}>{languages}</div></div>}
-              {extras    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Extra Activities</div><div style={{ fontSize: 13 }}>{extras}</div></div>}
-              {timings   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Available Timings</div><div style={{ fontSize: 13 }}>{timings}</div></div>}
-              {pay       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Expected Pay / hr</div><div style={{ fontSize: 13 }}>₹{pay}</div></div>}
-              {referral  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Referral</div><div style={{ fontSize: 13 }}>{referral}</div></div>}
-              {open      && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Open to Contact</div><div style={{ fontSize: 13 }}>{open}</div></div>}
-              {workhours && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>College / Work Timings</div><div style={{ fontSize: 13 }}>{workhours}</div></div>}
+      {/* Detail row — always rendered, animated via max-height */}
+      <tr className={`detail-row${expanded ? ' open' : ''}`} id={`detail-${uid}`}>
+        <td colSpan="8">
+          <div className="detail-body-wrap">
+            <div className="detail-body-inner">
+              <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {submitted && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Submitted</div><div style={{ fontSize: 13 }}>{formatDate(submitted)}</div></div>}
+                {email     && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Email</div><div style={{ fontSize: 13 }}>{email}</div></div>}
+                {student   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student / Working</div><div style={{ fontSize: 13 }}>{student}</div></div>}
+                {college   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>College / Company</div><div style={{ fontSize: 13 }}>{college}</div></div>}
+                {location  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Stay Location</div><div style={{ fontSize: 13 }}>{location}</div></div>}
+                {travel    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Travel Mode</div><div style={{ fontSize: 13 }}>{travel}</div></div>}
+                {subjects  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Subjects</div><div style={{ fontSize: 13 }}>{subjects}</div></div>}
+                {languages && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Languages</div><div style={{ fontSize: 13 }}>{languages}</div></div>}
+                {extras    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Extra Activities</div><div style={{ fontSize: 13 }}>{extras}</div></div>}
+                {timings   && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Available Timings</div><div style={{ fontSize: 13 }}>{timings}</div></div>}
+                {pay       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Expected Pay / hr</div><div style={{ fontSize: 13 }}>₹{pay}</div></div>}
+                {referral  && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Referral</div><div style={{ fontSize: 13 }}>{referral}</div></div>}
+                {open      && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Open to Contact</div><div style={{ fontSize: 13 }}>{open}</div></div>}
+                {workhours && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>College / Work Timings</div><div style={{ fontSize: 13 }}>{workhours}</div></div>}
+                {meetLink  && <div style={{ gridColumn: '1 / -1' }}><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Google Meet</div><a href={meetLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#1a73e8', wordBreak: 'break-all' }}>{meetLink}</a></div>}
+              </div>
             </div>
-          </td>
-        </tr>
-      )}
+          </div>
+        </td>
+      </tr>
     </>
   );
 }

@@ -4,12 +4,17 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { C, CP, SHEETS, DEV_MODE } from '../../constants';
 import { cellValue, updateCell } from '../../services/sheetsApi';
+
+function parseSchedules(raw) {
+  try { return JSON.parse(raw || '[]') || []; } catch { return []; }
+}
 import { pad2, parseDate, buildSheetDateTime } from '../../utils/dateUtils';
 import {
   closeScheduleModal, showToast, showLoader, hideLoader,
   openWAShareModal, openCalPromptModal,
 } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
+import { loadParents } from '../../features/parents/parentsSlice';
 
 const ITEM_H = 48;
 
@@ -47,6 +52,14 @@ function ParentSearch({ selectedParent, onSelect, onClear }) {
   const [matches, setMatches] = useState([]);
   const parentCache           = useSelector(s => s.parents.cache);
   const parentRows            = useSelector(s => s.parents.allRows);
+  const parentsLoading        = useSelector(s => s.parents.isLoading);
+  const dispatch              = useDispatch();
+
+  useEffect(() => {
+    if (!parentRows.length && !parentsLoading) {
+      dispatch(loadParents({ tabKey: 'all' }));
+    }
+  }, []);
 
   const pool = parentCache.length ? parentCache : parentRows;
 
@@ -91,23 +104,21 @@ function ParentSearch({ selectedParent, onSelect, onClear }) {
           <input
             type="text"
             className="modal-input"
-            placeholder="Search parent name or number…"
+            placeholder={parentsLoading ? 'Loading parents…' : 'Search parent name or number…'}
             value={query}
             onChange={e => search(e.target.value)}
             autoComplete="off"
             style={{ marginBottom: 0 }}
+            disabled={parentsLoading}
           />
           {matches.length > 0 && (
             <div className="modal-parent-dd" style={{ display: 'block' }}>
               {matches.map((r, i) => (
-                <div key={i} className="modal-parent-dd-item" onClick={() => pick(r)}>
-                  <span className="mpdd-name">{r[CP.NAME]}</span>
-                  {r[CP.STUDENT_NAME] && (
-                    <span className="mpdd-sub"> · {r[CP.STUDENT_NAME]}</span>
-                  )}
-                  {r[CP.PHONE] && (
-                    <span className="mpdd-phone"> {r[CP.PHONE]}</span>
-                  )}
+                <div key={i} className="mpdd-item" onClick={() => pick(r)}>
+                  <div className="mpdd-name">{r[CP.NAME]}</div>
+                  <div className="mpdd-sub">
+                    {r[CP.STUDENT_NAME] ? `${r[CP.STUDENT_NAME]} · ` : ''}{r[CP.PHONE]}
+                  </div>
                 </div>
               ))}
             </div>
@@ -122,7 +133,7 @@ function ParentSearch({ selectedParent, onSelect, onClear }) {
 export default function ScheduleModal() {
   const dispatch    = useDispatch();
   const token       = useSelector(s => s.auth.token);
-  const { open, sheetRow, current } = useSelector(s => s.ui.modals.schedule);
+  const { open, sheetRow, current, scheduleId } = useSelector(s => s.ui.modals.schedule);
   const tutorRows   = useSelector(s => s.tutors.allRows);
 
   const parsedDefaults = (() => {
@@ -193,12 +204,24 @@ export default function ScheduleModal() {
     const parentStr = [parent.name, parent.phone, parent.studentName, parent.address || ''].join('|');
 
     setSaving(true);
+    const row = tutorRows.find(r => r[31] === sheetRow);
+
     if (!DEV_MODE) {
       dispatch(showLoader());
       try {
+        // Legacy columns (backward compat)
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_STATUS + 1, 'Scheduled', token);
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_AT     + 1, fmt,         token);
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULED_PARENT + 1, parentStr,   token);
+
+        // SCHEDULES JSON
+        const schedules = parseSchedules(row ? cellValue(row, C.SCHEDULES) : '');
+        const entry = { id: scheduleId || `vis-${Date.now()}`, type: 'visit', at: fmt, parent: parentStr, calId: '' };
+        const updated = scheduleId
+          ? schedules.map(s => s.id === scheduleId ? entry : s)
+          : [...schedules, entry];
+        await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token);
+        dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: JSON.stringify(updated) }));
       } catch (err) {
         dispatch(hideLoader());
         dispatch(showToast({ message: 'Schedule failed: ' + err.message, type: 'error' }));
@@ -213,16 +236,9 @@ export default function ScheduleModal() {
     dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULED_PARENT, value: parentStr   }));
 
     // Auto-mark Contacted = Yes
-    const row = tutorRows.find(r => r[31] === sheetRow);
     if (row && cellValue(row, C.CONTACTED) !== 'Yes') {
       dispatch(updateRowInPlace({ sheetRow, colIdx: C.CONTACTED, value: 'Yes' }));
       if (!DEV_MODE) updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CONTACTED + 1, 'Yes', token).catch(() => {});
-    }
-
-    // Auto-set STATUS = 'In-Loop' on first schedule if no status set
-    if (row && !cellValue(row, C.STATUS)) {
-      dispatch(updateRowInPlace({ sheetRow, colIdx: C.STATUS, value: 'In-Loop' }));
-      if (!DEV_MODE) updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.STATUS + 1, 'In-Loop', token).catch(() => {});
     }
 
     close();
@@ -231,12 +247,15 @@ export default function ScheduleModal() {
     // Show WA share modal after scheduling
     const tutorName  = row ? cellValue(row, C.NAME)  : '';
     const tutorPhone = row ? cellValue(row, C.PHONE) : '';
+    const tutorEmail = row ? cellValue(row, C.EMAIL) : '';
     dispatch(openWAShareModal({
-      tutorName, tutorPhone: tutorPhone, dateStr: fmt,
+      type: 'visit',
+      tutorName, tutorPhone, dateStr: fmt,
       parentName:   parent.name,
       parentPhone:  parent.phone,
       studentName:  parent.studentName,
       parentAddress: parent.address || '',
+      tutorEmail,
       sheetRow,
     }));
   };

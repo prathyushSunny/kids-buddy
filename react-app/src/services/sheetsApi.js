@@ -66,7 +66,8 @@ export async function fetchSheetRows(sheetName, from, to, token) {
 export async function fetchRowCount(sheetName, token) {
   const range = encodeURIComponent(`${sheetName}!A:A`);
   const res = await apiFetch(`${BASE}/${SPREADSHEET_ID}/values/${range}`, {}, token);
-  return (res.values || []).slice(1).filter(r => r.length > 0 && r[0]).length;
+  // Subtract 1 for the header row; Sheets API omits trailing empty rows so length is accurate
+  return Math.max(0, (res.values || []).length - 1);
 }
 
 // ── SHEET WRITES ──────────────────────────────────────────────────────────────
@@ -156,15 +157,21 @@ export function buildCalendarBody(tutorName, tutorEmail, dateStr, description = 
   };
   if (description) body.description = description;
   if (tutorEmail)  body.attendees   = [{ email: tutorEmail }];
+  body.conferenceData = {
+    createRequest: {
+      requestId: `kb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      conferenceSolutionKey: { type: 'hangoutsMeet' },
+    },
+  };
   return body;
 }
 
 export async function createCalendarEvent(body, token) {
-  return apiFetch(`${CAL_BASE}?sendUpdates=all`, { method: 'POST', body: JSON.stringify(body) }, token);
+  return apiFetch(`${CAL_BASE}?conferenceDataVersion=1&sendUpdates=all`, { method: 'POST', body: JSON.stringify(body) }, token);
 }
 
 export async function updateCalendarEvent(eventId, body, token) {
-  return apiFetch(`${CAL_BASE}/${eventId}?sendUpdates=all`, { method: 'PATCH', body: JSON.stringify(body) }, token);
+  return apiFetch(`${CAL_BASE}/${eventId}?conferenceDataVersion=1&sendUpdates=all`, { method: 'PATCH', body: JSON.stringify(body) }, token);
 }
 
 export async function deleteCalendarEvent(eventId, token) {
@@ -175,4 +182,49 @@ export async function deleteCalendarEvent(eventId, token) {
   if (!res.ok && res.status !== 410) {
     throw new Error(`Calendar DELETE ${res.status}`);
   }
+}
+
+// ── NOTES ─────────────────────────────────────────────────────────────────────
+function _noteRow(note) {
+  return [
+    note.noteId,
+    note.createdAt,
+    note.updatedAt,
+    note.author,
+    note.title,
+    JSON.stringify(note.items),
+    note.pinned ? 'TRUE' : 'FALSE',
+    note.status,
+  ];
+}
+
+export async function fetchNotes(token) {
+  const res = await fetchSheetRows('Notes', 'A', 'H', token);
+  return (res.values || [])
+    .slice(1)
+    .map((r, i) => ({
+      noteId:    r[0] || '',
+      createdAt: r[1] || '',
+      updatedAt: r[2] || '',
+      author:    r[3] || '',
+      title:     r[4] || '',
+      items:     (() => { try { return JSON.parse(r[5] || '[]'); } catch { return []; } })(),
+      pinned:    r[6] === 'TRUE',
+      status:    r[7] || 'open',
+      _row:      i + 2,
+    }))
+    .filter(n => n.status !== 'deleted');
+}
+
+export async function createNote(note, token) {
+  return appendRow('Notes', _noteRow(note), token);
+}
+
+export async function saveNote(rowIndex, note, token) {
+  const range = encodeURIComponent(`Notes!A${rowIndex}:H${rowIndex}`);
+  return apiFetch(
+    `${BASE}/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW`,
+    { method: 'PUT', body: JSON.stringify({ values: [_noteRow(note)] }) },
+    token,
+  );
 }

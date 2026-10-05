@@ -7,7 +7,7 @@ import { formatDate, nowSheetFmt } from '../../utils/dateUtils';
 import { setConfirmCallback } from '../../utils/confirmService';
 import {
   toggleUidSelection, showToast, showLoader, hideLoader,
-  openConfirmModal, openActionsModal, openEditCardModal, openQuickMoveModal,
+  openConfirmModal, openActionsModal, openEditCardModal, openContactFollowUpModal,
 } from '../../features/ui/uiSlice';
 import { updateRowInPlace, removeRow, incrementTabCount } from '../../features/parents/parentsSlice';
 
@@ -60,6 +60,14 @@ const COPY_SVG = (
   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <rect x="9" y="9" width="13" height="13" rx="2"/>
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+  </svg>
+);
+const SAVE_CONTACT_SVG = (
+  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <line x1="19" y1="8" x2="19" y2="14"/>
+    <line x1="22" y1="11" x2="16" y2="11"/>
   </svg>
 );
 const USER_SVG = (
@@ -152,16 +160,13 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
     }
   };
 
-  // ── handleCommunicationTap — marks contacted + prompts QuickMove ─────────────
-  const handleCommunicationTap = async () => {
-    if (contacted !== 'Yes') {
-      updateLocal(CP.CONTACTED, 'Yes');
-      if (!DEV_MODE) {
-        try { await updateCell(cfg?.sheet || SHEETS.PARENTS_TO_CONTACT, sheetRow, CP.CONTACTED + 1, 'Yes', token); }
-        catch { updateLocal(CP.CONTACTED, contacted); }
-      }
-    }
-    dispatch(openQuickMoveModal({ sheetRow, uid, name, section: 'parents', sheet: cfg?.sheet || SHEETS.PARENTS_TO_CONTACT }));
+  // ── handleCommunicationTap — opens contact follow-up flow (only if not yet contacted) ──
+  const handleCommunicationTap = () => {
+    if (contacted === 'Yes') return;
+    dispatch(openContactFollowUpModal({
+      sheetRow, uid, name, section: 'parents',
+      sheet: cfg?.sheet || SHEETS.PARENTS_TO_CONTACT,
+    }));
   };
 
   // Contact pill toggle
@@ -180,6 +185,28 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
     e.stopPropagation();
     if (!digits) return;
     navigator.clipboard.writeText(digits).then(() => dispatch(showToast('Copied')));
+  };
+
+  // Save contact (vCard download)
+  const saveContact = (e) => {
+    e.stopPropagation();
+    const email = cellValue(row, CP.EMAIL) || '';
+    const vcf = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${name}`,
+      `TEL;TYPE=CELL:${digits ? `+91${digits}` : ''}`,
+      email ? `EMAIL:${email}` : '',
+      'END:VCARD',
+    ].filter(Boolean).join('\r\n');
+    const blob = new Blob([vcf], { type: 'text/vcard' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${name}.vcf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    dispatch(showToast(`${name} saved to contacts`));
   };
 
   // Trash
@@ -240,6 +267,11 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
       {digits && (
         <button className="icon-copy" title="Copy number" onClick={copyPhone}>
           {COPY_SVG}
+        </button>
+      )}
+      {digits && (
+        <button className="icon-copy" title="Save contact" onClick={saveContact}>
+          {SAVE_CONTACT_SVG}
         </button>
       )}
     </span>
@@ -360,24 +392,26 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
         </td>
       </tr>
 
-      {/* Detail row */}
-      {expanded && (
-        <tr className="detail-row open">
-          <td colSpan="8">
-            <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-              {onboardedOn && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Onboarded On</div><div style={{ fontSize: 13 }}>{formatDate(onboardedOn)}</div></div>}
-              {email       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Email</div><div style={{ fontSize: 13 }}>{email}</div></div>}
-              {location    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Location</div><div style={{ fontSize: 13 }}>{location}</div></div>}
-              {address     && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Address</div><div style={{ fontSize: 13 }}>{address}</div></div>}
-              {studentName && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student Name</div><div style={{ fontSize: 13 }}>{studentName}</div></div>}
-              {grade       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student Grade</div><div style={{ fontSize: 13 }}>{grade}</div></div>}
-              {subjects    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Subjects Needed</div><div style={{ fontSize: 13 }}>{subjects}</div></div>}
-              {tutor       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Assigned Tutor</div><div style={{ fontSize: 13 }}>{tutor}</div></div>}
-              {lastContact && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Last Contacted</div><div style={{ fontSize: 13 }}>{lastContact}</div></div>}
+      {/* Detail row — always rendered, animated via max-height */}
+      <tr className={`detail-row${expanded ? ' open' : ''}`}>
+        <td colSpan="8">
+          <div className="detail-body-wrap">
+            <div className="detail-body-inner">
+              <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {onboardedOn && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Onboarded On</div><div style={{ fontSize: 13 }}>{formatDate(onboardedOn)}</div></div>}
+                {email       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Email</div><div style={{ fontSize: 13 }}>{email}</div></div>}
+                {location    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Location</div><div style={{ fontSize: 13 }}>{location}</div></div>}
+                {address     && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Address</div><div style={{ fontSize: 13 }}>{address}</div></div>}
+                {studentName && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student Name</div><div style={{ fontSize: 13 }}>{studentName}</div></div>}
+                {grade       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Student Grade</div><div style={{ fontSize: 13 }}>{grade}</div></div>}
+                {subjects    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Subjects Needed</div><div style={{ fontSize: 13 }}>{subjects}</div></div>}
+                {tutor       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Assigned Tutor</div><div style={{ fontSize: 13 }}>{tutor}</div></div>}
+                {lastContact && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Last Contacted</div><div style={{ fontSize: 13 }}>{lastContact}</div></div>}
+              </div>
             </div>
-          </td>
-        </tr>
-      )}
+          </div>
+        </td>
+      </tr>
     </>
   );
 }

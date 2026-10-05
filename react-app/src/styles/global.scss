@@ -171,11 +171,9 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   border-radius: 12px;
   padding: 14px 14px 0;
   box-shadow: $shadow;
-  cursor: pointer;
+  cursor: default;
   transition: background 0.1s;
   position: relative;
-
-  &:hover { background: white; }
   &.expanded {
     background: #f8fafc;
     border-bottom-left-radius: 0;
@@ -297,20 +295,28 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 
 // ── Detail row ────────────────────────────────────────────────────────────────
 .detail-row {
-  display: none;
-  &.open {
-    display: block;
-    margin-top: -10px;
-  }
   td {
     display: block;
-    border: 1px solid $border;
-    border-top: none;
-    border-radius: 0 0 12px 12px;
-    padding: 14px;
-    background: #f8fafc;
+    padding: 0;
+    border: none;
     cursor: default;
   }
+}
+.detail-body-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.detail-row.open .detail-body-wrap {
+  max-height: 2000px;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.detail-body-inner {
+  border: 1px solid $border;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 14px;
+  background: #f8fafc;
 }
 
 // ── Expand button ─────────────────────────────────────────────────────────────
@@ -507,9 +513,13 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 
 .bin-name  { display: block; font-size: 15px; font-weight: 600; color: $text; }
 .bin-meta  { display: block; font-size: 13px; color: $muted; margin-top: 2px; }
-.days-left {
-  display: inline-block; font-size: 12px; font-weight: 600; color: $muted; margin-top: 6px;
-  &.danger { color: #e53e3e; }
+
+.btn-bin-expand {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  border: 1px solid $border; background: #fff; color: $muted;
+  cursor: pointer;
+  &:hover { background: #f1f5f9; }
 }
 
 .btn-restore {
@@ -517,8 +527,22 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   padding: 7px 14px; border-radius: 8px;
   border: 1.5px solid $primary;
   background: #fff; color: $primary;
-  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; margin-left: 12px;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; margin-left: 8px;
   &:hover { background: rgba(79,142,247,0.08); }
+}
+
+.bin-detail-row {
+  background: #f8fafc;
+  border: 1px solid $border;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  td { padding: 14px 16px; }
+}
+
+.bin-expanded-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 // ── Modal base ────────────────────────────────────────────────────────────────
@@ -811,7 +835,7 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 
 // ── Filter panel ──────────────────────────────────────────────────────────────
 .filter-panel {
-  margin: 6px 12px 0; padding: 14px;
+  margin: 8px 0 12px; padding: 14px;
   background: white; border: 1px solid $border;
   border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
@@ -912,9 +936,11 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 .topbar-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; color: $muted; font-size: 13px; }
 #user-email { display: none; } // hidden on mobile (matches vanilla)
-.btn-signout {
-  background: none; border: 1px solid $border; border-radius: 6px;
-  padding: 5px 12px; cursor: pointer; font-size: 12px; color: $muted;
+.btn-topbar {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid $border; border-radius: 7px;
+  padding: 5px 11px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: $text; font-family: inherit;
   &:hover { background: $bg; }
 }
 
@@ -932,11 +958,18 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   border-radius: 10px; padding: 3px; background: $bg;
 }
 .section-tab {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 14px; font-size: 12px; font-weight: 600;
   border: none; border-radius: 7px; cursor: pointer;
   background: none; color: $muted;
   transition: background 0.15s, color 0.15s;
   &.active { background: $primary; color: #fff; }
+}
+.section-tab-count {
+  font-size: 11px; font-weight: 700;
+  background: rgba(0,0,0,0.10); color: inherit;
+  border-radius: 10px; padding: 1px 6px; line-height: 1.4;
+  .active & { background: rgba(255,255,255,0.25); }
 }
 .btn-add-entry {
   display: inline-flex; align-items: center; gap: 4px;
@@ -963,20 +996,18 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 // ── Main content ──────────────────────────────────────────────────────────────
 .main { padding: 12px; }
 
-.stats {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 8px; margin-bottom: 20px;
+.stats-inline {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; font-size: 13px; color: $muted;
 }
-.stat-card {
-  background: $surface; border: 1px solid $border;
-  border-radius: $radius; padding: 10px 12px; box-shadow: $shadow;
+.stat-pill { display: flex; align-items: baseline; gap: 4px;
+  strong { font-size: 18px; font-weight: 700; color: $text; }
 }
-.stat-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: $muted; }
-.stat-value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+.stat-divider { color: $border; font-size: 16px; }
 
 .controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .controls-row2 { display: flex; gap: 8px; .btn { flex: 1; } }
-.search-input  { font-size: 16px; } // prevent iOS zoom
+.search-input  { font-size: 14px; }
 
 .result-count {
   font-size: 11px; color: $muted; margin-bottom: 10px;
@@ -988,7 +1019,8 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   input[type="checkbox"] { cursor: pointer; accent-color: $primary; }
   &:hover { color: $text; }
 }
-.btn-filter { position: relative; font-size: 12px; padding: 7px 12px; }
+.btn-filter { position: relative; padding: 7px 12px; }
+.btn-icon { font-size: 16px; line-height: 1; }
 
 // ── Interview / Schedule section ──────────────────────────────────────────────
 .iv-date { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: $text; margin-bottom: 6px; }
@@ -1007,6 +1039,82 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   padding: 4px 10px; border-radius: 6px;
   font-size: 11px; font-weight: 500; border: 1px solid $border; color: $muted; background: $bg;
 }
+.iv-cal-blocked { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: $muted; }
+.iv-meet-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: #1a73e8; font-weight: 500; margin-bottom: 6px;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+// ── Multi-schedule list ───────────────────────────────────────────────────────
+.sched-entry {
+  border: 1px solid $border; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; background: #fff;
+  &.sched-entry-done { opacity: 0.75; background: $bg; }
+}
+.sched-entry-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.sched-type-tag {
+  font-size: 11px; font-weight: 700; border-radius: 4px;
+  padding: 2px 8px; letter-spacing: 0.02em;
+  &.tag-interview { background: #eef2ff; color: #4338ca; }
+  &.tag-visit     { background: #f0fdf4; color: #166534; }
+}
+.sched-add-btn { margin-top: 4px; }
+
+// ── Post-time cleared/rejected inline prompt ──────────────────────────────────
+.sched-cleared-prompt {
+  margin-top: 8px; padding: 8px 10px;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px;
+  font-size: 13px; color: $text;
+}
+.sched-prompt-actions {
+  display: flex; gap: 8px; margin-top: 7px;
+}
+.btn-prompt-cleared {
+  font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 6px;
+  border: 1.5px solid $primary; background: $primary; color: #fff; cursor: pointer;
+  &:hover { opacity: 0.88; }
+}
+.btn-prompt-rejected {
+  font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 6px;
+  border: 1.5px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer;
+  &:hover { background: #fef2f2; }
+}
+
+// ── Onboarded Students section ────────────────────────────────────────────────
+.onboarded-section { margin-top: 0; border-top: 1px solid $border; padding-top: 10px; }
+.onboarded-student-row { padding: 6px 0; &:not(:last-child) { border-bottom: 1px solid $border; } }
+.onboarded-student-info { display: flex; flex-wrap: wrap; align-items: center; font-size: 13px; gap: 0; }
+.onboarded-arrow { display: inline-flex; align-items: center; color: $muted; margin-right: 5px; flex-shrink: 0; }
+.onboarded-student-actions { display: flex; align-items: center; gap: 10px; margin-top: 5px; margin-left: 17px; }
+.btn-deboard { background: none; border: 1px solid #dc2626; color: #dc2626; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.onboarded-name { font-weight: 700; color: $text; }
+.onboarded-sub  { color: $muted; }
+.onboarded-full-info {
+  margin-top: 8px; margin-left: 16px; font-size: 13px; color: $text; line-height: 1.8;
+  > div { display: flex; gap: 8px; }
+}
+.ofi-label { font-weight: 600; color: $muted; min-width: 64px; flex-shrink: 0; }
+.ofi-muted  { font-size: 12px; color: $muted; margin-top: 4px; }
+
+// ── Schedule type picker modal ────────────────────────────────────────────────
+.sched-type-card { max-width: 360px !important; }
+.sched-type-options { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 8px; }
+.sched-type-btn {
+  display: flex; flex-direction: column; align-items: flex-start;
+  width: 100%; background: $bg; border: 1.5px solid $border; border-radius: 12px;
+  padding: 14px 16px; cursor: pointer; text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  &:hover { border-color: $primary; background: #eef2ff; }
+}
+.sched-type-icon { display: flex; margin-bottom: 8px; color: $text; }
+.sched-type-label { font-size: 15px; font-weight: 700; color: $text; margin-bottom: 4px; }
+.sched-type-desc { font-size: 13px; color: $muted; line-height: 1.4; }
+
+// ── Interview modal sub-label ─────────────────────────────────────────────────
+.iv-modal-sub { font-size: 13px; color: $muted; margin: -8px 0 14px; }
 
 // ── Calendar prompt ───────────────────────────────────────────────────────────
 .cal-modal-heading { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; margin-bottom: 14px; }
@@ -1074,3 +1182,138 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 .filter-section   { margin-bottom: 14px; }
 .time-drum-row    { display: flex; align-items: center; gap: 10px; .time-drum { flex: 1; } }
 #drum-ampm        { display: flex; flex-direction: column; justify-content: center; gap: 8px; flex-shrink: 0; }
+
+
+// ── NOTES BUTTON in TopBar ───────────────────────────────────────────────────
+// .btn-notes-open merged into .btn-topbar
+
+// ── NOTES MODAL (bottom sheet) ───────────────────────────────────────────────
+.notes-modal-backdrop {
+  align-items: flex-end !important;
+  padding: 0 !important;
+  z-index: 300 !important;
+}
+
+.notes-modal-sheet {
+  background: $surface;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 -4px 32px rgba(0,0,0,.14);
+}
+
+.notes-modal-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid $border;
+  flex-shrink: 0;
+}
+
+.notes-modal-title {
+  font-size: 16px; font-weight: 700; color: $text;
+}
+
+.notes-modal-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 22px; line-height: 1; color: $muted;
+  padding: 2px 6px; border-radius: 6px;
+}
+
+.notes-modal-body {
+  flex: 1; overflow-y: auto;
+  padding: 16px 20px 40px;
+}
+
+// ── NOTES PAGE ────────────────────────────────────────────────────────────────
+.notes-page {
+  padding: 24px 0 60px;
+  max-width: 680px;
+}
+
+.notes-page-compact {
+  // no padding — modal body handles spacing
+}
+
+.notes-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+  .notes-heading {
+    margin: 0; font-size: 18px; font-weight: 700;
+    color: $text; letter-spacing: -.2px;
+  }
+}
+
+// Custom checkbox — rounded square
+.note-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  border: 1.5px solid $border;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .12s, border-color .12s;
+  background: transparent;
+  margin: 2px 0 0; // align with first line of multi-line text
+  &:checked {
+    background: $accent;
+    border-color: $accent;
+    &::after {
+      content: '';
+      position: absolute;
+      left: 4px; top: 2px;
+      width: 6px; height: 9px;
+      border: 1.5px solid #fff;
+      border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+  }
+}
+
+// Flat checklist
+.notes-list {
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.notes-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 8px 4px;
+}
+
+.notes-item-input {
+  flex: 1; font-size: 15px; line-height: 1.5;
+  color: $text; background: transparent;
+  border: none; outline: none; font-family: inherit;
+  padding: 0; min-width: 0;
+  resize: none; overflow: hidden;
+  &::placeholder { color: $muted; opacity: .4; }
+}
+
+.notes-item-del {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; line-height: 1; color: $muted;
+  opacity: .3; padding: 4px 6px; border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.notes-add-btn {
+  display: inline-flex; align-items: center;
+  background: none; border: none; cursor: pointer;
+  font-size: 14px; color: $muted; opacity: .4;
+  padding: 8px 4px; border-radius: 7px;
+  font-family: inherit;
+  margin-top: 4px;
+}
+
+.note-btn {
+  font-size: 12px; font-weight: 600; padding: 5px 11px;
+  border-radius: 6px; cursor: pointer; border: none;
+  font-family: inherit; line-height: 1;
+  &.note-btn-ghost {
+    background: transparent; color: $muted;
+    border: 1px solid $border;
+  }
+}

@@ -23,6 +23,13 @@ function buildTutorMsg(data) {
   return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}${addrLine}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
 }
 
+function buildInterviewMsg(data) {
+  const { tutorName, dateStr, meetLink } = data;
+  const date = formatDate(dateStr);
+  const meetLine = meetLink ? `\n🔗 Meet: ${meetLink}` : '';
+  return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled an interview with you:\n\n📅 ${date}${meetLine}\n\nPlease be ready to join on time. Looking forward to speaking with you!\n— KidsBuddy Team`;
+}
+
 function buildParentMsg(data) {
   const { tutorName, parentName, dateStr } = data;
   const date = formatDate(dateStr);
@@ -52,7 +59,11 @@ export default function WAShareModal() {
 
   useEffect(() => {
     if (!open || !data) return;
-    setTutorMsg(buildTutorMsg(data));
+    if (data.type === 'interview') {
+      setTutorMsg(buildInterviewMsg(data));
+    } else {
+      setTutorMsg(buildTutorMsg(data));
+    }
     setParentMsg(data.parentName ? buildParentMsg(data) : '');
     setPQuery('');
     setPMatches([]);
@@ -68,8 +79,8 @@ export default function WAShareModal() {
 
   const close = () => {
     dispatch(closeWAShareModal());
-    // If there's pending calendar data (new schedule, no calId yet), prompt
-    if (data.sheetRow && !data.existingCalId) {
+    // For visit type only: prompt to block in calendar if not already done
+    if (data.type !== 'interview' && data.sheetRow && !data.existingCalId) {
       dispatch(openCalPromptModal({
         sheetRow:     data.sheetRow,
         tutorName:    data.tutorName,
@@ -144,10 +155,10 @@ export default function WAShareModal() {
           </button>
         </div>
 
-        <div className="wa-divider" />
+        {data.type !== 'interview' && <div className="wa-divider" />}
 
-        {/* Parent section */}
-        <div className="wa-section">
+        {/* Parent section — hidden for interview type */}
+        {data.type !== 'interview' && <div className="wa-section">
           <div className="wa-section-label">Parent / Student</div>
 
           {chosenParent ? (
@@ -191,7 +202,7 @@ export default function WAShareModal() {
           >
             {WA_SEND_SVG} To Parent/Student
           </button>
-        </div>
+        </div>}
 
         <button className="wa-next-btn" onClick={close}>Done</button>
       </div>

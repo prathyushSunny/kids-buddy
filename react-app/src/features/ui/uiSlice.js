@@ -22,8 +22,15 @@ const uiSlice = createSlice({
       waShare: {
         open: false, data: null,
       },
+      scheduleType: {
+        open: false, sheetRow: null, uid: null, tutorName: '', tutorEmail: '',
+      },
       schedule: {
-        open: false, sheetRow: null, uid: null, current: '',
+        open: false, sheetRow: null, uid: null, current: '', scheduleId: null,
+      },
+      interviewSchedule: {
+        open: false, sheetRow: null, uid: null,
+        tutorName: '', tutorEmail: '', scheduleId: null, current: '',
       },
       addParent: { open: false },
       inLoop: {
@@ -37,6 +44,9 @@ const uiSlice = createSlice({
       },
       quickMove: {
         open: false, sheetRow: null, uid: null, name: '', section: 'parents', sheet: '',
+      },
+      contactFollowUp: {
+        open: false, sheetRow: null, uid: null, name: '', section: 'tutors', sheet: '',
       },
     },
   },
@@ -93,11 +103,25 @@ const uiSlice = createSlice({
       state.modals.waShare.open = false;
     },
 
+    openScheduleTypeModal(state, { payload }) {
+      state.modals.scheduleType = { open: true, ...payload };
+    },
+    closeScheduleTypeModal(state) {
+      state.modals.scheduleType.open = false;
+    },
+
     openScheduleModal(state, { payload }) {
       state.modals.schedule = { open: true, ...payload };
     },
     closeScheduleModal(state) {
       state.modals.schedule.open = false;
+    },
+
+    openInterviewScheduleModal(state, { payload }) {
+      state.modals.interviewSchedule = { open: true, ...payload };
+    },
+    closeInterviewScheduleModal(state) {
+      state.modals.interviewSchedule.open = false;
     },
 
     openAddParentModal(state) {
@@ -134,6 +158,13 @@ const uiSlice = createSlice({
     closeQuickMoveModal(state) {
       state.modals.quickMove.open = false;
     },
+
+    openContactFollowUpModal(state, { payload }) {
+      state.modals.contactFollowUp = { open: true, ...payload };
+    },
+    closeContactFollowUpModal(state) {
+      state.modals.contactFollowUp.open = false;
+    },
   },
 });
 
@@ -145,12 +176,15 @@ export const {
   openEditCardModal, closeEditCardModal,
   openConfirmModal, closeConfirmModal,
   openWAShareModal, closeWAShareModal,
+  openScheduleTypeModal, closeScheduleTypeModal,
   openScheduleModal, closeScheduleModal,
+  openInterviewScheduleModal, closeInterviewScheduleModal,
   openAddParentModal, closeAddParentModal,
   openInLoopModal, closeInLoopModal,
   openCalPromptModal, closeCalPromptModal,
   openPostRejectionModal, closePostRejectionModal,
   openQuickMoveModal, closeQuickMoveModal,
+  openContactFollowUpModal, closeContactFollowUpModal,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

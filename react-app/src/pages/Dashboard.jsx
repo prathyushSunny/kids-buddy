@@ -2,26 +2,29 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import TopBar from '../components/layout/TopBar';
 import TabBar from '../components/layout/TabBar';
+import NotesModal from '../components/modals/NotesModal';
 import TutorCard from '../components/cards/TutorCard';
 import ParentCard from '../components/cards/ParentCard';
 import BinCard from '../components/cards/BinCard';
 import DraftCard from '../components/cards/DraftCard';
 import BulkBar from '../components/layout/BulkBar';
-import { loadTutors, fetchTabCounts, setTabKey as setTutorTabKey, setSearchQuery as setTutorSearch, setFilterLocs as setTutorLocs, setFilterSubjs as setTutorSubjs, clearChipFilters as clearTutorChips } from '../features/tutors/tutorsSlice';
+import { loadTutors, fetchTabCounts, setTabKey as setTutorTabKey, setSearchQuery as setTutorSearch, setFilterLocs as setTutorLocs, setFilterSubjs as setTutorSubjs, setFilterTimings as setTutorTimings, clearChipFilters as clearTutorChips } from '../features/tutors/tutorsSlice';
 import { loadParents, fetchParentTabCounts, setTabKey as setParentTabKey, setSearchQuery as setParentSearch, setFilterLocs as setParentLocs, setFilterContacted as setParentContacted, clearChipFilters as clearParentChips } from '../features/parents/parentsSlice';
 import { setFilterContacted as setTutorContacted } from '../features/tutors/tutorsSlice';
 import { clearSelection, openAddParentModal, openEditCardModal, showLoader, hideLoader } from '../features/ui/uiSlice';
-import { SECTION_TABS, C, CP } from '../constants';
+import { SECTION_TABS, C, CP, SOURCE_LOCATIONS } from '../constants';
 import { cellValue } from '../services/sheetsApi';
 
 export default function Dashboard() {
   const dispatch = useDispatch();
   const [section,      setSection]      = useState('tutors');
   const [subTab,       setSubTab]        = useState('all');
+  const [notesOpen,    setNotesOpen]     = useState(false);
   const [search,       setSearch]        = useState('');
   const [filterOpen,   setFilterOpen]    = useState(false);
   const [activeLocs,      setActiveLocs]      = useState([]);
   const [activeSubjs,     setActiveSubjs]     = useState([]);
+  const [activeTimings,   setActiveTimings]   = useState([]);
   const [activeContacted, setActiveContacted] = useState('all'); // 'all' | 'yes' | 'no'
   const [expandedUid,  setExpandedUid]   = useState(null);
   const [displayCount, setDisplayCount]  = useState(25);
@@ -89,6 +92,7 @@ export default function Dashboard() {
     setFilterOpen(false);
     setActiveLocs([]);
     setActiveSubjs([]);
+    setActiveTimings([]);
     setActiveContacted('all');
     if (sec === 'tutors') { dispatch(setTutorTabKey(firstTab)); dispatch(clearTutorChips()); dispatch(setTutorContacted('all')); }
     else                   { dispatch(setParentTabKey(firstTab)); dispatch(clearParentChips()); dispatch(setParentContacted('all')); }
@@ -102,6 +106,7 @@ export default function Dashboard() {
     setFilterOpen(false);
     setActiveLocs([]);
     setActiveSubjs([]);
+    setActiveTimings([]);
     setActiveContacted('all');
     if (section === 'tutors') { dispatch(setTutorTabKey(tab)); dispatch(clearTutorChips()); dispatch(setTutorContacted('all')); }
     else                       { dispatch(setParentTabKey(tab)); dispatch(clearParentChips()); dispatch(setParentContacted('all')); }
@@ -135,6 +140,14 @@ export default function Dashboard() {
     dispatch(setTutorSubjs(next));
   };
 
+  const toggleTimingChip = (timing) => {
+    const next = activeTimings.includes(timing)
+      ? activeTimings.filter(t => t !== timing)
+      : [...activeTimings, timing];
+    setActiveTimings(next);
+    dispatch(setTutorTimings(next));
+  };
+
   const toggleContactedChip = (val) => {
     const next = activeContacted === val ? 'all' : val;
     setActiveContacted(next);
@@ -145,6 +158,7 @@ export default function Dashboard() {
   const clearFilters = () => {
     setActiveLocs([]);
     setActiveSubjs([]);
+    setActiveTimings([]);
     setActiveContacted('all');
     if (section === 'tutors') { dispatch(clearTutorChips()); dispatch(setTutorContacted('all')); }
     else                       { dispatch(clearParentChips()); dispatch(setParentContacted('all')); }
@@ -183,14 +197,16 @@ export default function Dashboard() {
 
   // Result count label
   const label = section === 'parents' ? 'contacts' : (isBin ? 'in bin' : isDraft ? 'drafts' : 'applications');
-  const hasChipFilters = activeLocs.length > 0 || activeSubjs.length > 0 || activeContacted !== 'all';
+  const hasChipFilters = activeLocs.length > 0 || activeSubjs.length > 0 || activeTimings.length > 0 || activeContacted !== 'all';
+  const TIMING_CHIPS = ['Between 5am to 10am', 'Between 10am to 4pm', 'Between 4pm to 9pm', 'Other'];
   const locCol = section === 'parents' ? CP.LOCATION : C.LOCATION;
   const locationOpts = [...new Set(allRows.map(r => cellValue(r, locCol)).filter(Boolean))].sort();
   const SUBJECT_CHIPS = ['Maths', 'Science', 'Social', 'Other'];
 
   return (
     <div>
-      <TopBar />
+      {notesOpen && <NotesModal onClose={() => setNotesOpen(false)} />}
+      <TopBar onNotesOpen={() => setNotesOpen(true)} />
       <TabBar
         section={section}
         onSectionChange={handleSectionChange}
@@ -200,16 +216,15 @@ export default function Dashboard() {
       />
 
       <div className="main">
-        {!isBin && !isDraft && (
-          <div className="stats">
-            <div className="stat-card">
-              <div className="stat-label">Contacted</div>
-              <div className="stat-value">{isLoading ? '—' : contactedCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Not Contacted</div>
-              <div className="stat-value">{isLoading ? '—' : notContactedCount}</div>
-            </div>
+        {currentCfg.key === 'all' && (
+          <div className="stats-inline">
+            <span className="stat-pill">
+              <strong>{isLoading ? '—' : contactedCount}</strong> Contacted
+            </span>
+            <span className="stat-divider">·</span>
+            <span className="stat-pill">
+              <strong>{isLoading ? '—' : notContactedCount}</strong> Not yet
+            </span>
           </div>
         )}
 
@@ -226,9 +241,9 @@ export default function Dashboard() {
               <button
                 className={`btn btn-ghost btn-filter${hasChipFilters ? ' has-filters' : ''}`}
                 onClick={() => setFilterOpen(v => !v)}
-              >⚙ Filters</button>
+              ><span className="btn-icon">⚙</span> Filters</button>
             )}
-            <button className="btn btn-ghost" onClick={() => loadData(section, subTab)}>↻ Refresh</button>
+            <button className="btn btn-ghost" onClick={() => loadData(section, subTab)}><span className="btn-icon">↻</span> Refresh</button>
           </div>
         </div>
 
@@ -249,7 +264,31 @@ export default function Dashboard() {
                 ))}
             </div>
             </div>
-            {locationOpts.length > 0 && (
+            {section === 'tutors' ? (
+              <div className="filter-section">
+                <div className="filter-label">Location</div>
+                <div className="filter-opts">
+                  {SOURCE_LOCATIONS.map(loc => (
+                    <label key={loc} className="filter-chip">
+                      <input
+                        type="checkbox"
+                        checked={activeLocs.includes(loc)}
+                        onChange={() => toggleLocChip(loc)}
+                      />
+                      <span>{loc}</span>
+                    </label>
+                  ))}
+                  <label key="__other__" className="filter-chip">
+                    <input
+                      type="checkbox"
+                      checked={activeLocs.includes('__other__')}
+                      onChange={() => toggleLocChip('__other__')}
+                    />
+                    <span>Other</span>
+                  </label>
+                </div>
+              </div>
+            ) : locationOpts.length > 0 && (
               <div className="filter-section">
                 <div className="filter-label">Location</div>
                 <div className="filter-opts">
@@ -279,6 +318,24 @@ export default function Dashboard() {
                         onChange={() => toggleSubjChip(subj)}
                       />
                       <span>{subj}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {section === 'tutors' && (
+              <div className="filter-section">
+                <div className="filter-label">Availability</div>
+                <div className="filter-opts">
+                  {TIMING_CHIPS.map(t => (
+                    <label key={t} className="filter-chip">
+                      <input
+                        type="checkbox"
+                        checked={activeTimings.includes(t)}
+                        onChange={() => toggleTimingChip(t)}
+                      />
+                      <span>{t}</span>
                     </label>
                   ))}
                 </div>

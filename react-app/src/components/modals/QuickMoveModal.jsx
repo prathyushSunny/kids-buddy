@@ -4,7 +4,7 @@ import { CP, SHEETS, DEV_MODE } from '../../constants';
 import { updateCell, appendRow, deleteRow, getSheetIds } from '../../services/sheetsApi';
 import { nowSheetFmt } from '../../utils/dateUtils';
 import { closeQuickMoveModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
-import { updateRowInPlace, removeRow, incrementTabCount } from '../../features/parents/parentsSlice';
+import { moveRowStatus, removeRow, incrementTabCount } from '../../features/parents/parentsSlice';
 
 export default function QuickMoveModal() {
   const dispatch   = useDispatch();
@@ -31,7 +31,7 @@ export default function QuickMoveModal() {
       }
       dispatch(hideLoader());
     }
-    dispatch(updateRowInPlace({ sheetRow, colIdx: CP.STATUS, value: 'In-Loop' }));
+    dispatch(moveRowStatus({ sheetRow, newStatus: 'In-Loop' }));
     dispatch(showToast(`${name} added to In-Loop`));
   };
 

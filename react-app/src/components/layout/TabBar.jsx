@@ -10,6 +10,16 @@ export default function TabBar({ section, onSectionChange, subTab, onSubTabChang
   const counts = section === 'tutors' ? tutorCounts : parentCounts;
   const tabs   = SECTION_TABS[section] || [];
 
+  const totalFor = (c) => {
+    const all   = c.all   ?? 0;
+    const draft = c.draft ?? 0;
+    const bin   = c.bin   ?? 0;
+    return all + draft + bin;
+  };
+
+  const tutorTotal  = totalFor(tutorCounts);
+  const parentTotal = totalFor(parentCounts);
+
   return (
     <div className="tab-bar">
       <div className="section-tab-row">
@@ -17,11 +27,15 @@ export default function TabBar({ section, onSectionChange, subTab, onSubTabChang
           <button
             className={`section-tab${section === 'tutors' ? ' active' : ''}`}
             onClick={() => onSectionChange('tutors')}
-          >Tutors</button>
+          >
+            Tutors{tutorTotal > 0 ? <span className="section-tab-count">{tutorTotal}</span> : null}
+          </button>
           <button
             className={`section-tab${section === 'parents' ? ' active' : ''}`}
             onClick={() => onSectionChange('parents')}
-          >Parents</button>
+          >
+            Parents{parentTotal > 0 ? <span className="section-tab-count">{parentTotal}</span> : null}
+          </button>
         </div>
         <button className="btn-add-entry" onClick={onAddEntry}>
           + Add a {section === 'tutors' ? 'Tutor' : 'Parent/Student'}

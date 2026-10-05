@@ -8,14 +8,16 @@ import Toast from './components/common/Toast';
 import Loader from './components/common/Loader';
 import ConfirmModal from './components/modals/ConfirmModal';
 import ActionsModal from './components/modals/ActionsModal';
-import InLoopModal from './components/modals/InLoopModal';
+import ScheduleTypeModal from './components/modals/ScheduleTypeModal';
 import ScheduleModal from './components/modals/ScheduleModal';
+import InterviewScheduleModal from './components/modals/InterviewScheduleModal';
 import WAShareModal from './components/modals/WAShareModal';
 import CalendarPromptModal from './components/modals/CalendarPromptModal';
 import PostRejectionModal from './components/modals/PostRejectionModal';
 import EditCardModal from './components/modals/EditCardModal';
 import AddParentModal from './components/modals/AddParentModal';
 import QuickMoveModal from './components/modals/QuickMoveModal';
+import ContactFollowUpModal from './components/modals/ContactFollowUpModal';
 
 // CMS shell — auth-gated SignIn / Dashboard
 function CMSRoot() {
@@ -28,14 +30,16 @@ function CMSRoot() {
       {isLoading && <Loader />}
       <ConfirmModal />
       <ActionsModal />
-      <InLoopModal />
+      <ScheduleTypeModal />
       <ScheduleModal />
+      <InterviewScheduleModal />
       <WAShareModal />
       <CalendarPromptModal />
       <PostRejectionModal />
       <EditCardModal />
       <AddParentModal />
       <QuickMoveModal />
+      <ContactFollowUpModal />
     </>
   );
 }
