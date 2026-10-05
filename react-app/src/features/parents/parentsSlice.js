@@ -58,18 +58,19 @@ export const loadParents = createAsyncThunk(
 export const fetchParentTabCounts = createAsyncThunk(
   'parents/fetchTabCounts',
   async (_, { getState, rejectWithValue }) => {
-    if (DEV_MODE) return { bin: 0, draft: 0 };
+    if (DEV_MODE) return { bin: 0, draft: 0, all: 0 };
     const { auth: { token } } = getState();
     try {
-      const [binRes, draftRes] = await Promise.all([
+      const [binRes, draftRes, allCount] = await Promise.all([
         fetchSheetRows(SHEETS.PARENTS_BIN,   'A2', 'D', token),
         fetchSheetRows(SHEETS.PARENTS_DRAFT, 'A1', 'D', token),
+        fetchRowCount(SHEETS.PARENTS_TO_CONTACT, token),
       ]);
       const binCount = (binRes.values || []).filter(r => r.length > 0).length;
       let draftRows = (draftRes.values || []);
       if (draftRows.length > 0 && draftRows[0][0] === 'Parent ID') draftRows = draftRows.slice(1);
       const draftCount = draftRows.filter(r => r.length > 0).length;
-      return { bin: binCount, draft: draftCount };
+      return { bin: binCount, draft: draftCount, all: allCount };
     } catch {
       return rejectWithValue('count fetch failed');
     }
@@ -234,6 +235,7 @@ const parentsSlice = createSlice({
       .addCase(fetchParentTabCounts.fulfilled, (state, { payload }) => {
         state.tabCounts.bin   = payload.bin;
         state.tabCounts.draft = payload.draft;
+        if (state.tabCounts.all === undefined) state.tabCounts.all = payload.all;
       });
   },
 });
