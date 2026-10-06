@@ -69,13 +69,18 @@ export default function CalendarPromptModal() {
     dispatch(showLoader());
     try {
       const row        = tutorRows.find(r => r[31] === sheetRow);
-      const existingId = row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '';
+      const scheduleEntryCalId = scheduleId && row
+        ? (parseSchedules(cellValue(row, C.SCHEDULES)).find(s => s.id === scheduleId)?.calId || '')
+        : '';
+      const existingId = scheduleEntryCalId || (row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '');
 
       let calId;
       let meetLink = '';
       const body = buildCalendarBody(tutorName, tutorEmail, dateStr, desc, eventName);
       if (existingId) {
-        const res = await updateCalendarEvent(existingId, body, token);
+        // Strip conferenceData on update — preserves existing Meet link instead of generating a new one
+        const { conferenceData: _omit, ...updateBody } = body;
+        const res = await updateCalendarEvent(existingId, updateBody, token);
         calId = existingId;
         meetLink = res?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || '';
       } else {

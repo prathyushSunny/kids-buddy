@@ -327,8 +327,9 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
       if (!DEV_MODE) {
         dispatch(showLoader());
         try {
-          if (entry.calId && entry.type === 'interview') {
-            await deleteCalendarEvent(entry.calId, token).catch(() => {});
+          const calIdToDelete = entry.calId || (isLegacy ? (cellValue(row, C.CALENDAR_EVENT_ID) || '') : '');
+          if (calIdToDelete) {
+            await deleteCalendarEvent(calIdToDelete, token).catch(() => {});
           }
           if (isLegacy || entry.type === 'visit') {
             await Promise.all([
