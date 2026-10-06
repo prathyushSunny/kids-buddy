@@ -10,7 +10,8 @@ import { parseDate, formatDateAbsolute, formatTime } from '../../utils/dateUtils
 import { closeCalPromptModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
 
-// <<CAL_GATE>> const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com'];
+// Only these emails are allowed to receive real calendar invites during dev
+const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com']; // <<CAL_GATE>>
 
 export default function CalendarPromptModal() {
   const dispatch  = useDispatch();
@@ -57,7 +58,12 @@ export default function CalendarPromptModal() {
   const blockCalendar = async () => {
     if (!tutorEmail) return;
 
-    // <<CAL_GATE>> if (!_CAL_ALLOWED_EMAILS.includes((tutorEmail || '').toLowerCase())) { close(); dispatch(showToast({ message: 'Calendar invite restricted to test accounts. No invite sent.', type: 'error' })); return; }
+    // Dev restriction: only send to whitelisted emails // <<CAL_GATE>>
+    if (!_CAL_ALLOWED_EMAILS.includes((tutorEmail || '').toLowerCase())) {
+      close();
+      dispatch(showToast({ message: 'Calendar invite restricted to test accounts. No invite sent.', type: 'error' }));
+      return;
+    }
 
     if (DEV_MODE) {
       close();
@@ -75,18 +81,15 @@ export default function CalendarPromptModal() {
       const existingId = scheduleEntryCalId || (row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '');
 
       let calId;
-      let meetLink = '';
       const body = buildCalendarBody(tutorName, tutorEmail, dateStr, desc, eventName);
+      // Visits don't need a Meet link — strip conferenceData for both create and update
+      const { conferenceData: _omit, ...visitBody } = body;
       if (existingId) {
-        // Strip conferenceData on update — preserves existing Meet link instead of generating a new one
-        const { conferenceData: _omit, ...updateBody } = body;
-        const res = await updateCalendarEvent(existingId, updateBody, token);
+        await updateCalendarEvent(existingId, visitBody, token);
         calId = existingId;
-        meetLink = res?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || '';
       } else {
-        const res = await createCalendarEvent(body, token);
+        const res = await createCalendarEvent(visitBody, token);
         calId = res.id;
-        meetLink = res?.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || '';
       }
 
       if (calId) {
@@ -102,14 +105,9 @@ export default function CalendarPromptModal() {
           await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, updatedStr, token);
         }
       }
-      if (meetLink) {
-        dispatch(updateRowInPlace({ sheetRow, colIdx: C.MEET_LINK, value: meetLink }));
-        await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.MEET_LINK + 1, meetLink, token);
-      }
-
       dispatch(hideLoader());
       close();
-      dispatch(showToast(meetLink ? `Calendar event created · Meet link saved` : 'Calendar event created'));
+      dispatch(showToast('Calendar event created'));
     } catch (err) {
       dispatch(hideLoader());
       close();

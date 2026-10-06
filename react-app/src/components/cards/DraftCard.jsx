@@ -41,6 +41,7 @@ export default function DraftCard({ row, section = 'tutors' }) {
   const name     = isParents ? cellValue(row, CP.NAME)     : cellValue(row, C.NAME);
   const phone    = isParents ? cellValue(row, CP.PHONE)    : cellValue(row, C.PHONE);
   const location = isParents ? cellValue(row, CP.LOCATION) : cellValue(row, C.LOCATION);
+  const notes    = isParents ? cellValue(row, CP.NOTES)    : cellValue(row, C.NOTES);
   const dateVal  = isParents
     ? formatDate(cellValue(row, CP.ONBOARDED_ON))
     : formatDate(cellValue(row, C.SUBMITTED));
@@ -94,7 +95,6 @@ export default function DraftCard({ row, section = 'tutors' }) {
           <InfoField label="Available Timings" value={cellValue(row, C.TIMINGS)} />
           <InfoField label="Expected Pay / hr" value={cellValue(row, C.PAY) ? `₹${cellValue(row, C.PAY)}` : ''} />
           <InfoField label="Classes"           value={cellValue(row, C.CLASSES)} />
-          <InfoField label="Notes"             value={cellValue(row, C.NOTES)} />
         </div>
       );
     }
@@ -106,7 +106,6 @@ export default function DraftCard({ row, section = 'tutors' }) {
         <InfoField label="Student Name"    value={cellValue(row, CP.STUDENT_NAME)} />
         <InfoField label="Student Grade"   value={cellValue(row, CP.STUDENT_GRADE)} />
         <InfoField label="Subjects Needed" value={cellValue(row, CP.SUBJECTS_NEEDED)} />
-        <InfoField label="Notes"           value={cellValue(row, CP.NOTES)} />
       </div>
     );
   };
@@ -120,6 +119,12 @@ export default function DraftCard({ row, section = 'tutors' }) {
             {phone}{location ? ` · ${location}` : ''}
           </span>
           <span className="bin-sub-date">{dateVal}</span>
+          {notes && (
+            <span className="bin-draft-notes">
+              <span className="bin-draft-notes-label">Notes</span>
+              {notes}
+            </span>
+          )}
         </td>
         <td className="td-bin-actions">
           <button

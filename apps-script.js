@@ -1259,3 +1259,68 @@ function createNotesTab() {
 
   Logger.log("createNotesTab complete.");
 }
+
+function addMapsLinkHeader() {
+  const SHEET_IDS = [
+    '1vnQWp10y3hzudckvRPGYVpnr6TS0rnXE6ytunrNI9-U', // STAGING
+    '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA', // PROD
+  ];
+  const PARENT_SHEETS = ['Parents (To-Contact)', 'Parents (Draft)', 'Parents (Bin)'];
+
+  SHEET_IDS.forEach(id => {
+    const ss = SpreadsheetApp.openById(id);
+    PARENT_SHEETS.forEach(name => {
+      const sheet = ss.getSheetByName(name);
+      if (!sheet) { Logger.log(`Not found: ${name} in ${id}`); return; }
+      sheet.getRange('S1').setValue('Maps Link');
+      Logger.log(`Done: ${name} in ${id}`);
+    });
+  });
+
+  Logger.log('All done.');
+}
+
+/**
+ * One-time: adds "Area" header in column T (index 19) of every parent tab in
+ * both Staging and Prod. Existing rows are left untouched — col T stays empty
+ * until a parent is re-saved via the app. Safe to run multiple times.
+ */
+function addAreaColumnToParentSheets() {
+  const PARENT_TABS = [
+    'Parents (To-Contact)',
+    'Parents (In-Loop)',
+    'Parents (Onboarded)',
+    'Parents (Draft)',
+    'Parents (Bin)',
+  ];
+
+  const SPREADSHEETS = {
+    staging: STAGING_SPREADSHEET_ID,
+    prod:    TARGET_SPREADSHEET_ID,
+  };
+
+  const AREA_COL     = 20; // 1-based → column T
+  const HEADER_LABEL = 'Area';
+
+  Object.entries(SPREADSHEETS).forEach(([env, id]) => {
+    const ss = SpreadsheetApp.openById(id);
+    PARENT_TABS.forEach(tabName => {
+      const sheet = ss.getSheetByName(tabName);
+      if (!sheet) {
+        Logger.log(`Skipped — not found in ${env}: ${tabName}`);
+        return;
+      }
+      if (sheet.getLastColumn() >= AREA_COL) {
+        const existing = String(sheet.getRange(1, AREA_COL).getValue()).trim();
+        if (existing === HEADER_LABEL) {
+          Logger.log(`Already present in ${env}/${tabName} — skipping`);
+          return;
+        }
+      }
+      sheet.getRange(1, AREA_COL).setValue(HEADER_LABEL).setFontWeight('bold');
+      Logger.log(`Added "${HEADER_LABEL}" header → ${env}/${tabName} (col T)`);
+    });
+  });
+
+  Logger.log('addAreaColumnToParentSheets complete.');
+}

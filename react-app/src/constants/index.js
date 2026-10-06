@@ -83,6 +83,7 @@ export const CP = {
   STATUS:15,
   DELETED_AT:16, ORIGINAL_TAB:17,
   MAPS_LINK:18,
+  AREA:19,
 };
 
 export const MAPS_API_KEY = 'AIzaSyB_2zfQ7_XvbHfjF_LtkkMnTko2oHm2Svc'; // <<MAPS_API_KEY>>
@@ -143,11 +144,12 @@ export const PARENT_EDIT_FIELDS = [
   { id: 'ec-subjects', label: 'Subjects Needed', col: 'SUBJECTS_NEEDED', type: 'multicheck', opts: ['Maths', 'Science (bio,chem,phy)', 'Social', 'English', 'Hindi', 'Telugu', 'Computer', 'Other'] },
   { id: 'ec-grade',    label: 'Student Grade',   col: 'STUDENT_GRADE',   type: 'select', opts: ['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12','Other'] },
   { id: 'ec-student',  label: 'Student Name',    col: 'STUDENT_NAME',    type: 'text' },
-  { id: 'ec-location', label: 'Location',        col: 'LOCATION',        type: 'place-search' },
+  { id: 'ec-location',  label: 'Location',        col: 'LOCATION',        type: 'place-search' },
   { id: 'ec-address',  label: 'Address',         col: 'ADDRESS',         type: 'textarea' },
-  { id: 'ec-tutor',     label: 'Assigned Tutor',  col: 'ASSIGNED_TUTOR',  type: 'text' },
-  { id: 'ec-notes',     label: 'Notes',           col: 'NOTES',           type: 'mic-textarea' },
-  { id: 'ec-maps-link', label: 'Maps Link',       col: 'MAPS_LINK',       type: 'hidden' },
+  { id: 'ec-area',     label: 'Area / Locality', col: 'AREA',            type: 'place-area' },
+  { id: 'ec-tutor',    label: 'Assigned Tutor',  col: 'ASSIGNED_TUTOR',  type: 'text' },
+  { id: 'ec-notes',    label: 'Notes',           col: 'NOTES',           type: 'mic-textarea' },
+  { id: 'ec-maps-link',label: 'Maps Link',       col: 'MAPS_LINK',       type: 'hidden' },
 ];
 
 // DEV_MODE — activate with ?dev in URL (no real sheet writes)

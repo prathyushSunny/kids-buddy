@@ -124,19 +124,19 @@ h3 { font-size: 18px; font-weight: 700; }
 /* "We're hiring" badge in desktop nav */
 .nav-hiring-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  background: #fffbeb; color: #92400e;
-  border: 1.5px solid #fde68a; border-radius: 20px;
+  background: rgba(147,197,253,.10); color: #93c5fd;
+  border: 1.5px solid rgba(147,197,253,.30); border-radius: 20px;
   padding: 5px 14px;
   font-family: 'Baloo 2', sans-serif; font-size: 13px; font-weight: 700;
   transition: background .2s, border-color .2s, transform .15s;
   white-space: nowrap; cursor: pointer;
 }
 .nav-hiring-badge:hover, .nav-hiring-badge:focus-visible {
-  background: #fef3c7; border-color: #f59e0b; color: #78350f; transform: translateY(-1px);
+  background: rgba(147,197,253,.18); border-color: rgba(147,197,253,.55); transform: translateY(-1px);
 }
 .hiring-dot {
   width: 7px; height: 7px; border-radius: 50%;
-  background: #f59e0b; flex-shrink: 0;
+  background: #93c5fd; flex-shrink: 0;
   animation: pulse-dot 1.8s ease-in-out infinite;
 }
 @keyframes pulse-dot {

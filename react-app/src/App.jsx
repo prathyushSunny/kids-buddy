@@ -18,6 +18,7 @@ import EditCardModal from './components/modals/EditCardModal';
 import AddParentModal from './components/modals/AddParentModal';
 import QuickMoveModal from './components/modals/QuickMoveModal';
 import ContactFollowUpModal from './components/modals/ContactFollowUpModal';
+import ShareToTutorModal from './components/modals/ShareToTutorModal';
 
 // CMS shell — auth-gated SignIn / Dashboard
 function CMSRoot() {
@@ -40,6 +41,7 @@ function CMSRoot() {
       <AddParentModal />
       <QuickMoveModal />
       <ContactFollowUpModal />
+      <ShareToTutorModal />
     </>
   );
 }

@@ -35,6 +35,7 @@ export default function AddParentModal() {
   const [location,     setLocation]     = useState('');
   const [address,      setAddress]      = useState('');
   const [mapsLink,     setMapsLink]     = useState('');
+  const [area,         setArea]         = useState('');
   const [student,      setStudent]      = useState('');
   const [grade,        setGrade]        = useState('');
   const [gradeOther,   setGradeOther]   = useState('');
@@ -47,7 +48,7 @@ export default function AddParentModal() {
 
   const reset = () => {
     setName(''); setPhone(''); setEmail(''); setLocation(''); setAddress('');
-    setMapsLink(''); setStudent(''); setGrade(''); setGradeOther('');
+    setMapsLink(''); setArea(''); setStudent(''); setGrade(''); setGradeOther('');
     setSubChecked(new Set()); setSubOther(''); setNotes('');
     setSaving(false);
   };
@@ -103,7 +104,7 @@ export default function AddParentModal() {
 
       const finalGrade = grade === 'Other' ? gradeOther.trim() : grade;
 
-      const row = new Array(19).fill('');
+      const row = new Array(20).fill('');
       row[CP.PARENT_ID]       = parentId;
       row[CP.ONBOARDED_ON]    = nowSheetFmt();
       row[CP.NAME]            = name.trim();
@@ -121,6 +122,7 @@ export default function AddParentModal() {
       row[CP.MAILED]          = 'No';
       row[CP.STATUS]          = '';
       row[CP.MAPS_LINK]       = mapsLink;
+      row[CP.AREA]            = area;
 
       if (!DEV_MODE) {
         await appendRow(SHEETS.PARENTS_TO_CONTACT, row, token);
@@ -164,9 +166,10 @@ export default function AddParentModal() {
           <PlaceSearch
             value={location}
             onChange={setLocation}
-            onSelect={(loc, placeId) => {
+            onSelect={(loc, placeId, areaName) => {
               setMapsLink(placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}&query_place_id=${placeId}` : '');
-              setAddress(prev => prev.trim() ? `${prev.trim()}\n${loc}` : loc);
+              setArea(areaName || '');
+              setAddress(loc);
             }}
             placeholder="Search area / locality…"
           />
@@ -174,6 +177,18 @@ export default function AddParentModal() {
           <label className="modal-label">Address</label>
           <textarea className="modal-input cal-desc-area" placeholder="Flat / house no., street, area…"
             rows="2" value={address} onChange={e => setAddress(e.target.value)} />
+
+          <label className="modal-label">
+            Area / Locality <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11, color: '#94a3b8' }}>auto-filled</span>
+          </label>
+          <input
+            className="modal-input"
+            type="text"
+            value={area}
+            disabled
+            placeholder="Auto-filled from location"
+            style={{ opacity: 0.6, cursor: 'not-allowed' }}
+          />
 
           <label className="modal-label">Student Name</label>
           <input className="modal-input" type="text" placeholder="Child's name" value={student}

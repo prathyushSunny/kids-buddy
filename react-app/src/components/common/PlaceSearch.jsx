@@ -1,7 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MAPS_API_KEY } from '../../constants';
 
-const PLACES_URL = 'https://places.googleapis.com/v1/places:autocomplete';
+const PLACES_URL  = 'https://places.googleapis.com/v1/places:autocomplete';
+const DETAILS_URL = 'https://places.googleapis.com/v1/places';
+
+async function fetchLocality(placeId) {
+  if (!placeId) return '';
+  try {
+    const res = await fetch(`${DETAILS_URL}/${placeId}`, {
+      headers: {
+        'X-Goog-Api-Key': MAPS_API_KEY,
+        'X-Goog-FieldMask': 'addressComponents',
+      },
+    });
+    const data = await res.json();
+    const components = data.addressComponents || [];
+    // Prefer sublocality_level_1 (e.g. "Bellandur"), then neighborhood, then locality (city)
+    const find = (type) => components.find(c => c.types?.includes(type))?.longText || '';
+    return find('sublocality_level_1') || find('neighborhood') || find('locality') || '';
+  } catch {
+    return '';
+  }
+}
 
 export default function PlaceSearch({ value, onChange, onSelect, placeholder }) {
   const [query,   setQuery]   = useState(value || '');
@@ -55,7 +75,7 @@ export default function PlaceSearch({ value, onChange, onSelect, placeholder }) 
     timer.current = setTimeout(() => search(q), 350);
   };
 
-  const handleSelect = (suggestion) => {
+  const handleSelect = async (suggestion) => {
     const sf      = suggestion.placePrediction?.structuredFormat;
     const placeId = suggestion.placePrediction?.placeId || '';
     const main    = sf?.mainText?.text || '';
@@ -63,9 +83,11 @@ export default function PlaceSearch({ value, onChange, onSelect, placeholder }) 
     const full    = sec ? `${main}, ${sec}` : main;
     setQuery(full);
     onChange(full);
-    if (onSelect) onSelect(full, placeId);
     setResults([]);
     setOpen(false);
+    // Fetch proper locality name (sublocality_level_1) from Place Details
+    const area = await fetchLocality(placeId);
+    if (onSelect) onSelect(full, placeId, area);
   };
 
   return (

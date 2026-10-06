@@ -162,6 +162,24 @@ function Field({ f, val, otherVal, multi, onVal, onOtherVal, onCheck, onOther, o
     );
   }
 
+  if (f.type === 'place-area') {
+    return (
+      <>
+        <label className="modal-label">
+          {f.label} <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11, color: '#94a3b8' }}>auto-filled</span>
+        </label>
+        <input
+          className="modal-input"
+          type="text"
+          value={val}
+          disabled
+          placeholder="Auto-filled from location"
+          style={{ opacity: 0.6, cursor: 'not-allowed' }}
+        />
+      </>
+    );
+  }
+
   if (f.type === 'textarea' || f.type === 'mic-textarea') {
     return (
       <>
@@ -365,14 +383,14 @@ export default function EditCardModal() {
 
   const onOtherVal = (id, v) => setValues(p => ({ ...p, [id + '-other']: v }));
 
-  const onPlaceSelect = (loc, placeId) => {
+  const onPlaceSelect = (loc, placeId, area) => {
     const mapsUrl = placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}&query_place_id=${placeId}` : '';
     setValues(p => {
-      const existing = (p['ec-address'] || '').trim();
       return {
         ...p,
-        'ec-address': existing ? `${existing}\n${loc}` : loc,
+        'ec-address': loc,
         'ec-maps-link': mapsUrl,
+        'ec-area': area || '',
       };
     });
   };

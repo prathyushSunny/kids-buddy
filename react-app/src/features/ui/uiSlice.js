@@ -48,6 +48,9 @@ const uiSlice = createSlice({
       contactFollowUp: {
         open: false, sheetRow: null, uid: null, name: '', section: 'tutors', sheet: '',
       },
+      shareToTutor: {
+        open: false, parentName: '', studentName: '', grade: '', subjects: '', area: '',
+      },
     },
   },
   reducers: {
@@ -165,6 +168,13 @@ const uiSlice = createSlice({
     closeContactFollowUpModal(state) {
       state.modals.contactFollowUp.open = false;
     },
+
+    openShareToTutorModal(state, { payload }) {
+      state.modals.shareToTutor = { open: true, ...payload };
+    },
+    closeShareToTutorModal(state) {
+      state.modals.shareToTutor.open = false;
+    },
   },
 });
 
@@ -185,6 +195,7 @@ export const {
   openPostRejectionModal, closePostRejectionModal,
   openQuickMoveModal, closeQuickMoveModal,
   openContactFollowUpModal, closeContactFollowUpModal,
+  openShareToTutorModal, closeShareToTutorModal,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

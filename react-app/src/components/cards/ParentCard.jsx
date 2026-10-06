@@ -8,6 +8,7 @@ import { setConfirmCallback } from '../../utils/confirmService';
 import {
   toggleUidSelection, showToast, showLoader, hideLoader,
   openConfirmModal, openActionsModal, openEditCardModal, openContactFollowUpModal,
+  openShareToTutorModal,
 } from '../../features/ui/uiSlice';
 import { updateRowInPlace, removeRow, incrementTabCount } from '../../features/parents/parentsSlice';
 
@@ -94,6 +95,13 @@ const STUDENT_SVG = (
     <path d="M6 12v5c3 3 9 3 12 0v-5"/>
   </svg>
 );
+const SHARE_SVG = (
+  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+  </svg>
+);
 
 // ── Main ParentCard ───────────────────────────────────────────────────────────
 export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand }) {
@@ -137,6 +145,7 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
   const status      = cellValue(row, CP.STATUS);
   const notes       = cellValue(row, CP.NOTES);
   const mapsLink    = cellValue(row, CP.MAPS_LINK);
+  const area        = cellValue(row, CP.AREA);
 
   const badgeClass  = status === 'In-Loop' ? 'badge-inloop' : status === 'Onboarded' ? 'badge-onboarded' : 'badge-hidden';
 
@@ -280,15 +289,25 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
 
   return (
     <>
-      <tr ref={cardRef} className={`data-row${expanded ? ' expanded' : ''}`} onClick={() => onExpand(uid)}>
+      <tr ref={cardRef} className={`data-row${expanded ? ' expanded' : ''}`}>
         {/* td-id */}
         <td className="td-id" />
 
-        {/* td-name: date + name (no source chip, no status badge for parents) */}
+        {/* td-name: date + name + share icon */}
         <td className="td-name">
           <span className="card-applied-at">{formatDate(onboardedOn)}</span>
           <span className={`status-badge ${badgeClass}`} data-uid={uid}>{status}</span>
           {name}
+          <button
+            className="btn-share-tutor"
+            title="Share to Tutor"
+            onClick={e => {
+              e.stopPropagation();
+              dispatch(openShareToTutorModal({ parentName: name, studentName, grade, subjects, area }));
+            }}
+          >
+            {SHARE_SVG}
+          </button>
         </td>
 
         {/* td-phone (desktop) */}
