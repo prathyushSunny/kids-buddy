@@ -10,7 +10,6 @@ import {
 } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
 
-const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com'];
 
 const ITEM_H = 48;
 
@@ -102,9 +101,7 @@ export default function InterviewScheduleModal() {
       let calId    = '';
       let meetLink = '';
 
-      const emailAllowed = _CAL_ALLOWED_EMAILS.includes((tutorEmail || '').toLowerCase());
-
-      if (!DEV_MODE && emailAllowed && tutorEmail) {
+      if (!DEV_MODE && tutorEmail) {
         const row       = tutorRows.find(r => r[31] === sheetRow);
         const existingId = row && scheduleId
           ? (parseSchedules(cellValue(row, C.SCHEDULES)).find(s => s.id === scheduleId)?.calId || '')
