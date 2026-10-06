@@ -6,8 +6,7 @@ import { parseDate, formatDateAbsolute, formatTime } from '../../utils/dateUtils
 import { closeCalPromptModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
 
-// Only these emails are allowed to receive real calendar invites during dev
-const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com'];
+// <<CAL_GATE>> const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmail.com'];
 
 export default function CalendarPromptModal() {
   const dispatch  = useDispatch();
@@ -54,12 +53,7 @@ export default function CalendarPromptModal() {
   const blockCalendar = async () => {
     if (!tutorEmail) return;
 
-    // Dev restriction: only send to whitelisted emails
-    if (!_CAL_ALLOWED_EMAILS.includes((tutorEmail || '').toLowerCase())) {
-      close();
-      dispatch(showToast({ message: 'Calendar invite restricted to test accounts. No invite sent.', type: 'error' }));
-      return;
-    }
+    // <<CAL_GATE>> if (!_CAL_ALLOWED_EMAILS.includes((tutorEmail || '').toLowerCase())) { close(); dispatch(showToast({ message: 'Calendar invite restricted to test accounts. No invite sent.', type: 'error' })); return; }
 
     if (DEV_MODE) {
       close();
