@@ -148,15 +148,15 @@ h3 { font-size: 18px; font-weight: 700; }
 .hiring-banner {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 20px;
-  background: rgba(15,23,42,.97);
-  border-bottom: 1px solid rgba(147,197,253,.20);
+  background: #1e2d4a;
+  border-bottom: 1px solid rgba(147,197,253,.30);
   font-family: 'Baloo 2', sans-serif; font-size: 14px; font-weight: 600;
   color: #93c5fd; cursor: pointer;
   transition: background .2s;
   text-decoration: none;
   position: sticky; top: 62px; z-index: 99;
 }
-.hiring-banner:hover { background: #0f172a; }
+.hiring-banner:hover { background: #243559; }
 .hiring-banner-cta { margin-left: auto; color: #93c5fd; font-weight: 700; font-size: 13px; }
 @media (min-width: 768px) { .hiring-banner { display: none; } }
 
