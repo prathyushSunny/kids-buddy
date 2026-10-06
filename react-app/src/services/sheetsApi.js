@@ -1,4 +1,4 @@
-import { SPREADSHEET_ID } from '../constants';
+import { SPREADSHEET_ID, ALL_SHEET_IDS } from '../constants';
 import { parseDate, pad2 } from '../utils/dateUtils';
 
 const BASE     = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -216,15 +216,43 @@ export async function fetchNotes(token) {
     .filter(n => n.status !== 'deleted');
 }
 
+// Upsert a note into any spreadsheet by noteId (row-index-agnostic for mirror writes)
+async function _upsertNoteInSheet(spreadsheetId, note, token) {
+  const range = encodeURIComponent('Notes!A:H');
+  const res   = await apiFetch(`${BASE}/${spreadsheetId}/values/${range}`, {}, token);
+  const rows  = (res.values || []).slice(1);
+  const idx   = rows.findIndex(r => r[0] === note.noteId);
+  if (idx >= 0) {
+    const rowNum      = idx + 2;
+    const updateRange = encodeURIComponent(`Notes!A${rowNum}:H${rowNum}`);
+    return apiFetch(
+      `${BASE}/${spreadsheetId}/values/${updateRange}?valueInputOption=RAW`,
+      { method: 'PUT', body: JSON.stringify({ values: [_noteRow(note)] }) },
+      token,
+    );
+  }
+  const appendRange = encodeURIComponent('Notes!A1');
+  return apiFetch(
+    `${BASE}/${spreadsheetId}/values/${appendRange}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: [_noteRow(note)] }) },
+    token,
+  );
+}
+
 export async function createNote(note, token) {
-  return appendRow('Notes', _noteRow(note), token);
+  return Promise.all(ALL_SHEET_IDS.map(id => _upsertNoteInSheet(id, note, token)));
 }
 
 export async function saveNote(rowIndex, note, token) {
-  const range = encodeURIComponent(`Notes!A${rowIndex}:H${rowIndex}`);
-  return apiFetch(
-    `${BASE}/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW`,
-    { method: 'PUT', body: JSON.stringify({ values: [_noteRow(note)] }) },
-    token,
-  );
+  // Fast-path for the active sheet (known row index); upsert-by-id for the mirror
+  const MIRROR_ID   = ALL_SHEET_IDS.find(id => id !== SPREADSHEET_ID) || ALL_SHEET_IDS[0];
+  const activeRange = encodeURIComponent(`Notes!A${rowIndex}:H${rowIndex}`);
+  return Promise.all([
+    apiFetch(
+      `${BASE}/${SPREADSHEET_ID}/values/${activeRange}?valueInputOption=RAW`,
+      { method: 'PUT', body: JSON.stringify({ values: [_noteRow(note)] }) },
+      token,
+    ),
+    _upsertNoteInSheet(MIRROR_ID, note, token),
+  ]);
 }

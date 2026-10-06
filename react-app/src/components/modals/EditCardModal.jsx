@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { C, CP, TUTOR_EDIT_FIELDS, PARENT_EDIT_FIELDS, SHEETS, DEV_MODE } from '../../constants';
 import useSpeechInput from '../../hooks/useSpeechInput';
 import { cellValue, updateCell, appendRow, fetchSheetRows } from '../../services/sheetsApi';
+import PlaceSearch from '../common/PlaceSearch';
 import { nowSheetFmt } from '../../utils/dateUtils';
 import {
   closeEditCardModal, showToast, showLoader, hideLoader,
@@ -43,6 +44,15 @@ function buildInit(fields, schema, row) {
       const checked  = new Set(selected.filter(s => knownSet.has(s)));
       const otherVals = selected.filter(s => !knownSet.has(s));
       multis[f.id] = { checked, other: otherVals.join(', ') };
+    } else if (f.type === 'select' && f.opts?.includes('Other')) {
+      const stdOpts = f.opts.filter(o => o !== 'Other');
+      if (val && !stdOpts.includes(val)) {
+        values[f.id] = 'Other';
+        values[f.id + '-other'] = val;
+      } else {
+        values[f.id] = val;
+        values[f.id + '-other'] = '';
+      }
     } else {
       values[f.id] = val;
     }
@@ -52,11 +62,17 @@ function buildInit(fields, schema, row) {
 
 // ── Field renderer ────────────────────────────────────────────────────────────
 
-function Field({ f, val, multi, onVal, onCheck, onOther }) {
+function Field({ f, val, otherVal, multi, onVal, onOtherVal, onCheck, onOther, onPlaceSelect }) {
   const id = f.id;
+
+  if (f.type === 'hidden') return null;
 
   if (f.type === 'multicheck') {
     const { checked, other } = multi || { checked: new Set(), other: '' };
+    const handleOther = (text) => {
+      onOther(id, text);
+      if (text && !checked.has('Other')) onCheck(id, 'Other');
+    };
     return (
       <>
         <label className="modal-label">{f.label}</label>
@@ -77,7 +93,7 @@ function Field({ f, val, multi, onVal, onCheck, onOther }) {
           type="text"
           placeholder="Other (specify)"
           value={other}
-          onChange={e => onOther(id, e.target.value)}
+          onChange={e => handleOther(e.target.value)}
           autoComplete="off"
         />
       </>
@@ -107,13 +123,41 @@ function Field({ f, val, multi, onVal, onCheck, onOther }) {
   }
 
   if (f.type === 'select') {
+    const hasOther = f.opts?.includes('Other');
     return (
       <>
         <label className="modal-label">{f.label}</label>
-        <select className="modal-input" value={val} onChange={e => onVal(id, e.target.value)}>
+        <select className="modal-input" value={val} onChange={e => {
+          onVal(id, e.target.value);
+          if (e.target.value !== 'Other' && onOtherVal) onOtherVal(id, '');
+        }}>
           <option value="">—</option>
           {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
+        {hasOther && val === 'Other' && (
+          <input
+            className="modal-input ec-other-input"
+            type="text"
+            placeholder="Specify…"
+            value={otherVal || ''}
+            onChange={e => onOtherVal && onOtherVal(id, e.target.value)}
+            autoComplete="off"
+          />
+        )}
+      </>
+    );
+  }
+
+  if (f.type === 'place-search') {
+    return (
+      <>
+        <label className="modal-label">{f.label}</label>
+        <PlaceSearch
+          value={val}
+          onChange={v => onVal(id, v)}
+          onSelect={onPlaceSelect}
+          placeholder="Search area / locality…"
+        />
       </>
     );
   }
@@ -319,8 +363,25 @@ export default function EditCardModal() {
     ...p, [id]: { ...(p[id] || { checked: new Set(), other: '' }), other: v },
   }));
 
+  const onOtherVal = (id, v) => setValues(p => ({ ...p, [id + '-other']: v }));
+
+  const onPlaceSelect = (loc, placeId) => {
+    const mapsUrl = placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : '';
+    setValues(p => {
+      const existing = (p['ec-address'] || '').trim();
+      return {
+        ...p,
+        'ec-address': existing ? `${existing}\n${loc}` : loc,
+        'ec-maps-link': mapsUrl,
+      };
+    });
+  };
+
   const getVal = f => {
     if (f.type === 'multicheck') return getMultiValue(multis[f.id] || { checked: new Set(), other: '' });
+    if (f.type === 'select' && f.opts?.includes('Other') && values[f.id] === 'Other') {
+      return values[f.id + '-other'] || 'Other';
+    }
     return values[f.id] || '';
   };
 
@@ -450,10 +511,13 @@ export default function EditCardModal() {
                 key={f.id}
                 f={f}
                 val={values[f.id] || ''}
+                otherVal={values[f.id + '-other'] || ''}
                 multi={multis[f.id]}
                 onVal={setVal}
+                onOtherVal={onOtherVal}
                 onCheck={onCheck}
                 onOther={onOther}
+                onPlaceSelect={onPlaceSelect}
               />
             );
           })}

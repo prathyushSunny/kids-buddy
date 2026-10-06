@@ -23,20 +23,29 @@ const MIC_SVG = (
 );
 
 export default function NotesSection({ sheetRow, sheetName, initialNotes, colIdx, onUpdate }) {
-  const [notes,   setNotes]   = useState(initialNotes || '');
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState('');
-  const [saving,  setSaving]  = useState(false);
+  const [notes,        setNotes]        = useState(initialNotes || '');
+  const [editing,      setEditing]      = useState(false);
+  const [draft,        setDraft]        = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [isClamped,    setIsClamped]    = useState(false);
   const dispatch = useDispatch();
   const token    = useSelector(s => s.auth.token);
   const taRef    = useRef(null);
+  const textRef  = useRef(null);
 
   const { isListening, supported, toggle, stop, onPointerUp, reanchor } = useSpeechInput({
     taRef,
     onChange: setDraft,
   });
 
-  useEffect(() => { setNotes(initialNotes || ''); }, [initialNotes]);
+  useEffect(() => { setNotes(initialNotes || ''); setNotesExpanded(false); }, [initialNotes]);
+
+  // Detect whether the clamped text actually overflows
+  useEffect(() => {
+    if (!textRef.current || editing) return;
+    setIsClamped(textRef.current.scrollHeight > textRef.current.clientHeight + 2);
+  }, [notes, editing]);
 
   // Focus textarea when editing opens; stop mic when editing closes
   useEffect(() => {
@@ -140,7 +149,22 @@ export default function NotesSection({ sheetRow, sheetName, initialNotes, colIdx
             onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); cancel(); } }}
           />
         ) : notes ? (
-          <span className="notes-text">{notes}</span>
+          <div className={`notes-text-wrap${notesExpanded ? ' expanded' : ''}`}>
+            <span
+              ref={textRef}
+              className={`notes-text${notesExpanded ? '' : ' clamped'}`}
+            >
+              {notes}
+            </span>
+            {(isClamped || notesExpanded) && (
+              <button
+                className="btn-notes-expand"
+                onClick={e => { e.stopPropagation(); setNotesExpanded(v => !v); }}
+              >
+                {notesExpanded ? 'Collapse ↑' : '+ View full notes'}
+              </button>
+            )}
+          </div>
         ) : (
           <button className="btn-inline-text btn-add-notes" onClick={e => { e.stopPropagation(); openEdit(); }}>
             + Add notes

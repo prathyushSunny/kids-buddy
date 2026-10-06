@@ -392,12 +392,27 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 }
 
 // ── Inline notes ──────────────────────────────────────────────────────────────
+.notes-text-wrap {
+  position: relative;
+}
 .notes-text {
   display: block;
   white-space: pre-wrap;
   color: $muted;
   font-size: 13px;
   line-height: 1.6;
+  &.clamped {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+.btn-notes-expand {
+  background: none; border: none; padding: 2px 0 0; cursor: pointer;
+  font-size: 12px; color: #4f8ef7; text-decoration: underline;
+  text-underline-offset: 2px; display: block; margin-top: 2px;
+  &:hover { color: #2563eb; }
 }
 
 .card-notes-ta {
@@ -740,6 +755,24 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
 .tsi-name  { font-size: 14px; font-weight: 500; color: $text; }
 .tsi-phone { font-size: 12px; color: $muted; flex-shrink: 0; }
 
+.place-search-wrap {
+  position: relative;
+}
+.place-drop {
+  position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+  background: #fff; border: 1px solid #e2e5ed; border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10); z-index: 30; overflow: hidden;
+}
+.place-item {
+  width: 100%; padding: 10px 14px; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; gap: 2px; background: none; border: none;
+  border-bottom: 1px solid #f0f2f8;
+  &:last-child { border-bottom: none; }
+  &:hover { background: $bg; }
+}
+.place-main { font-size: 14px; font-weight: 500; color: $text; }
+.place-sub  { font-size: 12px; color: $muted; }
+
 .wa-search-wrap  { position: relative; margin: 6px 0 8px; }
 .wa-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0;
@@ -951,7 +984,8 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   position: sticky; top: 45px; z-index: 9;
 }
 .section-tab-row {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
 }
 .section-tabs {
   display: inline-flex; border: 1.5px solid $border;
@@ -1097,6 +1131,11 @@ tbody { display: flex; flex-direction: column; gap: 10px; }
   > div { display: flex; gap: 8px; }
 }
 .ofi-label { font-weight: 600; color: $muted; min-width: 64px; flex-shrink: 0; }
+.ofi-maps-link {
+  color: #4f8ef7; font-size: 13px; text-decoration: underline;
+  text-underline-offset: 2px;
+  &:hover { color: #2563eb; }
+}
 .ofi-muted  { font-size: 12px; color: $muted; margin-top: 4px; }
 
 // ── Schedule type picker modal ────────────────────────────────────────────────

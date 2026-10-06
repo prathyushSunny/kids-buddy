@@ -522,6 +522,20 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
                       {fullParent && fullParent[CP.SUBJECTS_NEEDED] && <div><span className="ofi-label">Subjects</span> {fullParent[CP.SUBJECTS_NEEDED]}</div>}
                       {fullParent && fullParent[CP.EMAIL]           && <div><span className="ofi-label">Email</span> {fullParent[CP.EMAIL]}</div>}
                       {fullParent && fullParent[CP.NOTES]           && <div><span className="ofi-label">Notes</span> {fullParent[CP.NOTES]}</div>}
+                      {fullParent && fullParent[CP.MAPS_LINK]       && (
+                        <div>
+                          <span className="ofi-label">Location</span>
+                          <a
+                            className="ofi-maps-link"
+                            href={fullParent[CP.MAPS_LINK]}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            Open in Maps ↗
+                          </a>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

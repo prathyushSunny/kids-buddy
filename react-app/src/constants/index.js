@@ -19,6 +19,7 @@ const _IDS = {
   PROD:    '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA',
 };
 export const SPREADSHEET_ID = _IDS.PROD; // <<ENV>>
+export const ALL_SHEET_IDS  = [_IDS.STAGING, _IDS.PROD];
 
 export const SHEETS = {
   TUTORS_APPLIED:     'Tutors (Applied)',
@@ -81,9 +82,10 @@ export const CP = {
   CONTACTED:12, NOTES:13, MAILED:14,
   STATUS:15,
   DELETED_AT:16, ORIGINAL_TAB:17,
+  MAPS_LINK:18,
 };
 
-export const MAPS_API_KEY = ''; // <<MAPS_API_KEY>>
+export const MAPS_API_KEY = 'AIzaSyB_2zfQ7_XvbHfjF_LtkkMnTko2oHm2Svc'; // <<MAPS_API_KEY>>
 
 export const PAGE_SIZE = 25;
 
@@ -139,12 +141,13 @@ export const PARENT_EDIT_FIELDS = [
   { id: 'ec-phone',    label: 'Phone',           col: 'PHONE',           type: 'tel' },
   { id: 'ec-email',    label: 'Email',           col: 'EMAIL',           type: 'email' },
   { id: 'ec-subjects', label: 'Subjects Needed', col: 'SUBJECTS_NEEDED', type: 'multicheck', opts: ['Maths', 'Science (bio,chem,phy)', 'Social', 'English', 'Hindi', 'Telugu', 'Computer', 'Other'] },
-  { id: 'ec-grade',    label: 'Student Grade',   col: 'STUDENT_GRADE',   type: 'select', opts: ['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12'] },
+  { id: 'ec-grade',    label: 'Student Grade',   col: 'STUDENT_GRADE',   type: 'select', opts: ['Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6','Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12','Other'] },
   { id: 'ec-student',  label: 'Student Name',    col: 'STUDENT_NAME',    type: 'text' },
-  { id: 'ec-location', label: 'Location',        col: 'LOCATION',        type: 'text' },
+  { id: 'ec-location', label: 'Location',        col: 'LOCATION',        type: 'place-search' },
   { id: 'ec-address',  label: 'Address',         col: 'ADDRESS',         type: 'textarea' },
-  { id: 'ec-tutor',    label: 'Assigned Tutor',  col: 'ASSIGNED_TUTOR',  type: 'text' },
-  { id: 'ec-notes',    label: 'Notes',           col: 'NOTES',           type: 'mic-textarea' },
+  { id: 'ec-tutor',     label: 'Assigned Tutor',  col: 'ASSIGNED_TUTOR',  type: 'text' },
+  { id: 'ec-notes',     label: 'Notes',           col: 'NOTES',           type: 'mic-textarea' },
+  { id: 'ec-maps-link', label: 'Maps Link',       col: 'MAPS_LINK',       type: 'hidden' },
 ];
 
 // DEV_MODE — activate with ?dev in URL (no real sheet writes)

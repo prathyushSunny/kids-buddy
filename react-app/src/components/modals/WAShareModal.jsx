@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { CP } from '../../constants';
 import { normalizePhone } from '../../services/sheetsApi';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDateAbsolute } from '../../utils/dateUtils';
 import { closeWAShareModal, openCalPromptModal } from '../../features/ui/uiSlice';
 
 const WA_SVG_ICON = (
@@ -17,22 +17,23 @@ const WA_SEND_SVG = (
 );
 
 function buildTutorMsg(data) {
-  const { tutorName, parentName, studentName, dateStr, parentAddress } = data;
-  const date = formatDate(dateStr);
+  const { tutorName, parentName, studentName, dateStr, parentAddress, parentMapsLink } = data;
+  const date = formatDateAbsolute(dateStr);
   const addrLine = (parentAddress || '').trim() ? `\n📍 Address: ${parentAddress.trim()}` : '';
-  return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}${addrLine}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
+  const mapsLine = (parentMapsLink || '').trim() ? `\n🗺️ Maps: ${parentMapsLink.trim()}` : '';
+  return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled a home visit for you:\n\n📅 ${date}\n👨‍👩‍👧 Student: ${studentName || '—'}\n👤 Parent: ${parentName || '—'}${addrLine}${mapsLine}\n\nPlease confirm your availability. Thank you!\n— KidsBuddy Team`;
 }
 
 function buildInterviewMsg(data) {
   const { tutorName, dateStr, meetLink } = data;
-  const date = formatDate(dateStr);
+  const date = formatDateAbsolute(dateStr);
   const meetLine = meetLink ? `\n🔗 Meet: ${meetLink}` : '';
   return `Hi ${tutorName}! 👋\n\n*KidsBuddy* has scheduled an interview with you:\n\n📅 ${date}${meetLine}\n\nPlease be ready to join on time. Looking forward to speaking with you!\n— KidsBuddy Team`;
 }
 
 function buildParentMsg(data) {
   const { tutorName, parentName, dateStr } = data;
-  const date = formatDate(dateStr);
+  const date = formatDateAbsolute(dateStr);
   return `Hi ${parentName}! 👋\n\n*KidsBuddy* has arranged a tutor visit at your home:\n\n📅 ${date}\n👩‍🏫 Tutor: ${tutorName || '—'}\n\nPlease ensure someone is available. Thank you!\n— KidsBuddy Team`;
 }
 
@@ -72,6 +73,7 @@ export default function WAShareModal() {
       phone:       data.parentPhone,
       studentName: data.studentName,
       address:     data.parentAddress || '',
+      mapsLink:    data.parentMapsLink || '',
     } : null);
   }, [open, data]);
 
@@ -82,13 +84,14 @@ export default function WAShareModal() {
     // For visit type only: prompt to block in calendar if not already done
     if (data.type !== 'interview' && data.sheetRow && !data.existingCalId) {
       dispatch(openCalPromptModal({
-        sheetRow:     data.sheetRow,
-        tutorName:    data.tutorName,
-        tutorEmail:   data.tutorEmail || '',
-        dateStr:      data.dateStr,
-        parentName:   data.parentName  || '',
-        studentName:  data.studentName || '',
+        sheetRow:      data.sheetRow,
+        tutorName:     data.tutorName,
+        tutorEmail:    data.tutorEmail || '',
+        dateStr:       data.dateStr,
+        parentName:    data.parentName  || '',
+        studentName:   data.studentName || '',
         parentAddress: data.parentAddress || '',
+        parentMapsLink: chosenParent?.mapsLink || data.parentMapsLink || '',
       }));
     }
   };
@@ -113,11 +116,12 @@ export default function WAShareModal() {
   };
 
   const pickParent = (r) => {
-    const p = { name: r[CP.NAME] || '', phone: r[CP.PHONE] || '', studentName: r[CP.STUDENT_NAME] || '', address: r[CP.ADDRESS] || '' };
+    const p = { name: r[CP.NAME] || '', phone: r[CP.PHONE] || '', studentName: r[CP.STUDENT_NAME] || '', address: r[CP.ADDRESS] || '', mapsLink: r[CP.MAPS_LINK] || '' };
     setChosenParent(p);
     setPQuery('');
     setPMatches([]);
-    const newData = { ...data, parentName: p.name, parentPhone: p.phone, studentName: p.studentName };
+    const newData = { ...data, parentName: p.name, parentPhone: p.phone, studentName: p.studentName, parentMapsLink: p.mapsLink };
+    setTutorMsg(buildTutorMsg(newData));
     setParentMsg(buildParentMsg(newData));
   };
 
@@ -129,7 +133,7 @@ export default function WAShareModal() {
         <h3 className="modal-title wa-modal-title">
           {WA_SVG_ICON} Share on WhatsApp
         </h3>
-        <div className="wa-date-chip">📅 {formatDate(data.dateStr)}</div>
+        <div className="wa-date-chip">📅 {formatDateAbsolute(data.dateStr)}</div>
 
         {/* Tutor section */}
         <div className="wa-section">

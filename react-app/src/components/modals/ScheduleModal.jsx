@@ -84,6 +84,7 @@ function ParentSearch({ selectedParent, onSelect, onClear }) {
       phone:       r[CP.PHONE]       || '',
       studentName: r[CP.STUDENT_NAME]|| '',
       address:     r[CP.ADDRESS]     || '',
+      mapsLink:    r[CP.MAPS_LINK]   || '',
     });
   };
 
@@ -178,8 +179,8 @@ export default function ScheduleModal() {
     if (row) {
       const raw = (row[C.SCHEDULED_PARENT] || '').trim();
       if (raw) {
-        const [pName, pPhone, pStudent, pAddress] = raw.split('|');
-        setParent({ name: pName || '', phone: pPhone || '', studentName: pStudent || '', address: pAddress || '' });
+        const [pName, pPhone, pStudent, pAddress, pMapsLink] = raw.split('|');
+        setParent({ name: pName || '', phone: pPhone || '', studentName: pStudent || '', address: pAddress || '', mapsLink: pMapsLink || '' });
       } else {
         setParent(null);
       }
@@ -201,7 +202,7 @@ export default function ScheduleModal() {
     const dateStr = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
     const h12 = hourIdx + 1;
     const fmt = buildSheetDateTime(dateStr, h12, minIdx, ampm);
-    const parentStr = [parent.name, parent.phone, parent.studentName, parent.address || ''].join('|');
+    const parentStr = [parent.name, parent.phone, parent.studentName, parent.address || '', parent.mapsLink || ''].join('|');
 
     setSaving(true);
     const row = tutorRows.find(r => r[31] === sheetRow);
@@ -255,6 +256,7 @@ export default function ScheduleModal() {
       parentPhone:  parent.phone,
       studentName:  parent.studentName,
       parentAddress: parent.address || '',
+      parentMapsLink: parent.mapsLink || '',
       tutorEmail,
       sheetRow,
     }));

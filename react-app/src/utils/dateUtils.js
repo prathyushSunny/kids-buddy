@@ -15,7 +15,17 @@ export function parseDate(str) {
   return isNaN(d) ? new Date(0) : d;
 }
 
-// Returns "Today, 9:00AM" / "Yesterday, 9:00AM" / "3 Oct, 2026, 9:00AM"
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Always returns full date: "6 Oct 2026, 9:00AM"
+export function formatDateAbsolute(str) {
+  if (!str) return '';
+  const d = parseDate(str);
+  if (!d || d.getTime() === 0) return str;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${formatTime(d)}`;
+}
+
+// Returns "Today, 9:00AM" / "Yesterday, 9:00AM" / "3 Oct 2026, 9:00AM"
 export function formatDate(str) {
   if (!str) return '';
   const d = parseDate(str);
@@ -27,11 +37,10 @@ export function formatDate(str) {
   const diff  = today - dDay; // ms
 
   const timeStr = formatTime(d);
-  if (diff === 0)      return `Today, ${timeStr}`;
+  if (diff === 0)        return `Today, ${timeStr}`;
   if (diff === 86400000) return `Yesterday, ${timeStr}`;
 
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${d.getDate()} ${months[d.getMonth()]}, ${d.getFullYear()}, ${timeStr}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${timeStr}`;
 }
 
 export function formatTime(d) {

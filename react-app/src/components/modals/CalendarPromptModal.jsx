@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { C, SHEETS, DEV_MODE } from '../../constants';
 import { cellValue, updateCell, createCalendarEvent, updateCalendarEvent, buildCalendarBody } from '../../services/sheetsApi';
-import { parseDate, formatDate, formatTime } from '../../utils/dateUtils';
+import { parseDate, formatDateAbsolute, formatTime } from '../../utils/dateUtils';
 import { closeCalPromptModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
 
@@ -12,7 +12,7 @@ const _CAL_ALLOWED_EMAILS = ['s.kumari.shirisha@gmail.com', 'prathyushsunny@gmai
 export default function CalendarPromptModal() {
   const dispatch  = useDispatch();
   const token     = useSelector(s => s.auth.token);
-  const { open, sheetRow, tutorName, tutorEmail, dateStr, parentName, studentName, parentAddress } =
+  const { open, sheetRow, tutorName, tutorEmail, dateStr, parentName, studentName, parentAddress, parentMapsLink } =
     useSelector(s => s.ui.modals.calPrompt);
   const tutorRows = useSelector(s => s.tutors.allRows);
 
@@ -24,7 +24,7 @@ export default function CalendarPromptModal() {
     if (!dateStr) return '';
     const start = parseDate(dateStr);
     const end   = new Date(start.getTime() + 60 * 60 * 1000);
-    return `${formatDate(dateStr)} – ${formatTime(end)}`;
+    return `${formatDateAbsolute(dateStr)} – ${formatTime(end)}`;
   })();
 
   const defTitle = studentName
@@ -35,7 +35,8 @@ export default function CalendarPromptModal() {
     const lines = [`KidsBuddy Visit — ${tutorName || ''}`];
     if (parentName)    lines.push(`Parent: ${parentName}`);
     if (studentName)   lines.push(`Student: ${studentName}`);
-    if ((parentAddress || '').trim()) lines.push(`Address: ${parentAddress.trim()}`);
+    if ((parentAddress  || '').trim()) lines.push(`Address: ${parentAddress.trim()}`);
+    if ((parentMapsLink || '').trim()) lines.push(`Maps: ${parentMapsLink.trim()}`);
     return lines.join('\n');
   })();
 

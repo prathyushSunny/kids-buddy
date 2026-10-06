@@ -136,6 +136,7 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
   const contacted   = cellValue(row, CP.CONTACTED);
   const status      = cellValue(row, CP.STATUS);
   const notes       = cellValue(row, CP.NOTES);
+  const mapsLink    = cellValue(row, CP.MAPS_LINK);
 
   const badgeClass  = status === 'In-Loop' ? 'badge-inloop' : status === 'Onboarded' ? 'badge-onboarded' : 'badge-hidden';
 
@@ -407,6 +408,7 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
                 {subjects    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Subjects Needed</div><div style={{ fontSize: 13 }}>{subjects}</div></div>}
                 {tutor       && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Assigned Tutor</div><div style={{ fontSize: 13 }}>{tutor}</div></div>}
                 {lastContact && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Last Contacted</div><div style={{ fontSize: 13 }}>{lastContact}</div></div>}
+                {mapsLink    && <div><div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: 3 }}>Maps</div><div style={{ fontSize: 13 }}><a href={mapsLink} target="_blank" rel="noopener noreferrer" style={{ color: '#1d4ed8', textDecoration: 'underline' }} onClick={e => e.stopPropagation()}>Open in Maps ↗</a></div></div>}
               </div>
             </div>
           </div>
