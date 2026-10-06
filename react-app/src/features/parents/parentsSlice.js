@@ -19,7 +19,7 @@ export const loadParents = createAsyncThunk(
 
     try {
       if (cfg.isBin) {
-        const res = await fetchSheetRows(SHEETS.PARENTS_BIN, 'A2', 'S', token);
+        const res = await fetchSheetRows(SHEETS.PARENTS_BIN, 'A2', 'T', token);
         const rows = (res.values || []).filter(r => r.length > 0);
         rows.forEach((r, i) => { r[31] = i + 2; });
         rows.sort((a, b) => parseDate(b[CP.DELETED_AT] || '') - parseDate(a[CP.DELETED_AT] || ''));
@@ -27,7 +27,7 @@ export const loadParents = createAsyncThunk(
       }
 
       if (cfg.isDraft) {
-        const res = await fetchSheetRows(SHEETS.PARENTS_DRAFT, 'A1', 'S', token);
+        const res = await fetchSheetRows(SHEETS.PARENTS_DRAFT, 'A1', 'T', token);
         let rows = res.values || [];
         let offset = 2;
         if (rows.length > 0 && (rows[0][0] === 'P' || rows[0][CP.NAME] === 'Customer Full Name' || rows[0][0] === 'Parent ID')) {
@@ -39,7 +39,7 @@ export const loadParents = createAsyncThunk(
       }
 
       // Sort newest-first in thunk (plain JS, no Immer) — CP.ONBOARDED_ON = index 1
-      const res = await fetchSheetRows(cfg.sheet, 'A2', 'S', token);
+      const res = await fetchSheetRows(cfg.sheet, 'A2', 'T', token);
       let rows = (res.values || []).filter(r => r.length > 0);
       rows.forEach((r, i) => { r[31] = i + 2; });
       rows.sort((a, b) => parseDate(b[CP.ONBOARDED_ON] || '') - parseDate(a[CP.ONBOARDED_ON] || ''));
