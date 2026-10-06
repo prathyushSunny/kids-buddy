@@ -165,7 +165,7 @@ export default function AddParentModal() {
             value={location}
             onChange={setLocation}
             onSelect={(loc, placeId) => {
-              setMapsLink(placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : '');
+              setMapsLink(placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}&query_place_id=${placeId}` : '');
               setAddress(prev => prev.trim() ? `${prev.trim()}\n${loc}` : loc);
             }}
             placeholder="Search area / locality…"

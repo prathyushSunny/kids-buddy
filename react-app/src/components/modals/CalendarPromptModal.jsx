@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { C, SHEETS, DEV_MODE } from '../../constants';
 import { cellValue, updateCell, createCalendarEvent, updateCalendarEvent, buildCalendarBody } from '../../services/sheetsApi';
+
+function parseSchedules(raw) {
+  try { return JSON.parse(raw || '[]'); } catch { return []; }
+}
 import { parseDate, formatDateAbsolute, formatTime } from '../../utils/dateUtils';
 import { closeCalPromptModal, showToast, showLoader, hideLoader } from '../../features/ui/uiSlice';
 import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
@@ -11,7 +15,7 @@ import { updateRowInPlace } from '../../features/tutors/tutorsSlice';
 export default function CalendarPromptModal() {
   const dispatch  = useDispatch();
   const token     = useSelector(s => s.auth.token);
-  const { open, sheetRow, tutorName, tutorEmail, dateStr, parentName, studentName, parentAddress, parentMapsLink } =
+  const { open, sheetRow, tutorName, tutorEmail, dateStr, parentName, studentName, parentAddress, parentMapsLink, scheduleId } =
     useSelector(s => s.ui.modals.calPrompt);
   const tutorRows = useSelector(s => s.tutors.allRows);
 
@@ -83,6 +87,15 @@ export default function CalendarPromptModal() {
       if (calId) {
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.CALENDAR_EVENT_ID, value: calId }));
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, calId, token);
+
+        // Update calId inside the SCHEDULES JSON entry so the badge shows
+        if (scheduleId && row) {
+          const schedules = parseSchedules(cellValue(row, C.SCHEDULES));
+          const updated = schedules.map(s => s.id === scheduleId ? { ...s, calId } : s);
+          const updatedStr = JSON.stringify(updated);
+          dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: updatedStr }));
+          await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, updatedStr, token);
+        }
       }
       if (meetLink) {
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.MEET_LINK, value: meetLink }));

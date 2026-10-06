@@ -366,7 +366,7 @@ export default function EditCardModal() {
   const onOtherVal = (id, v) => setValues(p => ({ ...p, [id + '-other']: v }));
 
   const onPlaceSelect = (loc, placeId) => {
-    const mapsUrl = placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : '';
+    const mapsUrl = placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(loc)}&query_place_id=${placeId}` : '';
     setValues(p => {
       const existing = (p['ec-address'] || '').trim();
       return {

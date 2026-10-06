@@ -205,6 +205,7 @@ export default function ScheduleModal() {
     const parentStr = [parent.name, parent.phone, parent.studentName, parent.address || '', parent.mapsLink || ''].join('|');
 
     setSaving(true);
+    const entryId = scheduleId || `vis-${Date.now()}`;
     const row = tutorRows.find(r => r[31] === sheetRow);
 
     if (!DEV_MODE) {
@@ -217,9 +218,9 @@ export default function ScheduleModal() {
 
         // SCHEDULES JSON
         const schedules = parseSchedules(row ? cellValue(row, C.SCHEDULES) : '');
-        const entry = { id: scheduleId || `vis-${Date.now()}`, type: 'visit', at: fmt, parent: parentStr, calId: '' };
+        const entry = { id: entryId, type: 'visit', at: fmt, parent: parentStr, calId: '' };
         const updated = scheduleId
-          ? schedules.map(s => s.id === scheduleId ? entry : s)
+          ? schedules.map(s => s.id === entryId ? entry : s)
           : [...schedules, entry];
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token);
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: JSON.stringify(updated) }));
@@ -257,6 +258,7 @@ export default function ScheduleModal() {
       studentName:  parent.studentName,
       parentAddress: parent.address || '',
       parentMapsLink: parent.mapsLink || '',
+      scheduleId: entryId,
       tutorEmail,
       sheetRow,
     }));

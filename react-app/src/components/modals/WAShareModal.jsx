@@ -92,6 +92,7 @@ export default function WAShareModal() {
         studentName:   data.studentName || '',
         parentAddress: data.parentAddress || '',
         parentMapsLink: chosenParent?.mapsLink || data.parentMapsLink || '',
+        scheduleId:    data.scheduleId || null,
       }));
     }
   };

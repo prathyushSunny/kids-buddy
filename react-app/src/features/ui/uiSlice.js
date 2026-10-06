@@ -37,7 +37,7 @@ const uiSlice = createSlice({
         open: false, sheetRow: null, uid: null, name: '', section: 'tutors', sheet: '',
       },
       calPrompt: {
-        open: false, sheetRow: null, tutorName: '', tutorEmail: '', dateStr: '', calDesc: '', eventName: '', parentMapsLink: '',
+        open: false, sheetRow: null, tutorName: '', tutorEmail: '', dateStr: '', calDesc: '', eventName: '', parentMapsLink: '', scheduleId: null,
       },
       postRejection: {
         open: false, sheetRow: null, uid: null,

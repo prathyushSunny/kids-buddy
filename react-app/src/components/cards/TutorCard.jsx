@@ -294,12 +294,14 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
         sheetRow, existingCalId: entry.calId || '',
       }));
     } else {
-      const [pName, pPhone, pStudent, pAddress] = (entry.parent || '').split('|');
+      const [pName, pPhone, pStudent, pAddress, pMapsLink] = (entry.parent || '').split('|');
       dispatch(openWAShareModal({
         type: 'visit', tutorName: name, tutorPhone: phone,
         dateStr: entry.at,
         parentName: pName || '', parentPhone: pPhone || '',
         studentName: pStudent || '', parentAddress: pAddress || '',
+        parentMapsLink: pMapsLink || '',
+        scheduleId: entry.id || null,
         sheetRow, existingCalId: entry.calId || '',
       }));
     }
@@ -307,11 +309,13 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
 
   const openBlockCal = (e, entry) => {
     e.stopPropagation();
-    const [pName, , pStudent, pAddress] = (entry.parent || '').split('|');
+    const [pName, , pStudent, pAddress, pMapsLink] = (entry.parent || '').split('|');
     dispatch(openCalPromptModal({
       sheetRow, tutorName: cellValue(row, C.NAME),
       tutorEmail: cellValue(row, C.EMAIL), dateStr: entry.at,
-      parentName: pName || '', studentName: pStudent || '', parentAddress: pAddress || '',
+      parentName: pName || '', studentName: pStudent || '',
+      parentAddress: pAddress || '', parentMapsLink: pMapsLink || '',
+      scheduleId: entry.id || null,
     }));
   };
 
