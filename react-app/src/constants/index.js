@@ -18,7 +18,7 @@ const _IDS = {
   STAGING: '1vnQWp10y3hzudckvRPGYVpnr6TS0rnXE6ytunrNI9-U',
   PROD:    '1geFgIn4mAlObjLG0GJhuZZdmrNVD4AZP32ccCYVuZOA',
 };
-export const SPREADSHEET_ID = _IDS.STAGING; // <<ENV>>
+export const SPREADSHEET_ID = _IDS.PROD; // <<ENV>>
 export const ALL_SHEET_IDS  = [_IDS.STAGING, _IDS.PROD];
 
 export const SHEETS = {
