@@ -30,9 +30,7 @@ export default function CalendarPromptModal() {
     return `${formatDateAbsolute(dateStr)} – ${formatTime(end)}`;
   })();
 
-  const defTitle = studentName
-    ? `Invitation: KidsBuddy Tutor <> ${studentName}`
-    : 'Invitation: KidsBuddy Tutor <> Student Visit';
+  const defTitle = `KidsBuddy Invitation: Tutor visit with ${studentName || 'Student'}`;
 
   const defDesc = (() => {
     const lines = [`KidsBuddy Visit — ${tutorName || ''}`];
@@ -70,28 +68,32 @@ export default function CalendarPromptModal() {
       const scheduleEntryCalId = scheduleId && row
         ? (parseSchedules(cellValue(row, C.SCHEDULES)).find(s => s.id === scheduleId)?.calId || '')
         : '';
-      const existingId = scheduleEntryCalId || (row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '');
+      const hasSchedulesJson = row && parseSchedules(cellValue(row, C.SCHEDULES)).length > 0;
+      // Only fall back to legacy CALENDAR_EVENT_ID when there are no SCHEDULES entries (truly legacy row)
+      const existingId = scheduleEntryCalId || (!hasSchedulesJson && row ? (cellValue(row, C.CALENDAR_EVENT_ID) || '').trim() : '');
 
-      let calId;
+      let calId, calLink;
       const body = buildCalendarBody(tutorName, tutorEmail, dateStr, desc, eventName);
       // Visits don't need a Meet link — strip conferenceData for both create and update
       const { conferenceData: _omit, ...visitBody } = body;
       if (existingId) {
-        await updateCalendarEvent(existingId, visitBody, token);
-        calId = existingId;
+        const res = await updateCalendarEvent(existingId, visitBody, token);
+        calId   = existingId;
+        calLink = res?.htmlLink || '';
       } else {
         const res = await createCalendarEvent(visitBody, token);
-        calId = res.id;
+        calId   = res.id;
+        calLink = res?.htmlLink || '';
       }
 
       if (calId) {
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.CALENDAR_EVENT_ID, value: calId }));
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.CALENDAR_EVENT_ID + 1, calId, token);
 
-        // Update calId inside the SCHEDULES JSON entry so the badge shows
+        // Update calId + calLink inside the SCHEDULES JSON entry
         if (scheduleId && row) {
           const schedules = parseSchedules(cellValue(row, C.SCHEDULES));
-          const updated = schedules.map(s => s.id === scheduleId ? { ...s, calId } : s);
+          const updated = schedules.map(s => s.id === scheduleId ? { ...s, calId, calLink } : s);
           const updatedStr = JSON.stringify(updated);
           dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: updatedStr }));
           await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, updatedStr, token);

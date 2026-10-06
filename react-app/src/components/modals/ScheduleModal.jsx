@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { C, CP, SHEETS, DEV_MODE } from '../../constants';
-import { cellValue, updateCell } from '../../services/sheetsApi';
+import { cellValue, updateCell, buildCalendarBody, updateCalendarEvent } from '../../services/sheetsApi';
 
 function parseSchedules(raw) {
   try { return JSON.parse(raw || '[]') || []; } catch { return []; }
@@ -25,7 +25,7 @@ function DrumCol({ items, defaultIndex, onChange }) {
   useEffect(() => {
     if (!ref.current) return;
     ref.current.scrollTop = (defaultIndex + 1) * ITEM_H;
-  }, []);
+  }, [defaultIndex]);
 
   const handleScroll = useCallback(() => {
     if (!ref.current) return;
@@ -208,6 +208,19 @@ export default function ScheduleModal() {
     const entryId = scheduleId || `vis-${Date.now()}`;
     const row = tutorRows.find(r => r[31] === sheetRow);
 
+    const tutorName  = row ? cellValue(row, C.NAME)  : '';
+    const tutorPhone = row ? cellValue(row, C.PHONE) : '';
+    const tutorEmail = row ? cellValue(row, C.EMAIL) : '';
+
+    // Capture existing entry BEFORE saving to preserve calId/calLink
+    const existingEntry = scheduleId && row
+      ? parseSchedules(cellValue(row, C.SCHEDULES)).find(s => s.id === scheduleId)
+      : null;
+    const preservedCalId   = existingEntry?.calId   || '';
+    const preservedCalLink = existingEntry?.calLink  || '';
+
+    let savedSchedules = null;
+
     if (!DEV_MODE) {
       dispatch(showLoader());
       try {
@@ -216,12 +229,13 @@ export default function ScheduleModal() {
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.INTERVIEW_AT     + 1, fmt,         token);
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULED_PARENT + 1, parentStr,   token);
 
-        // SCHEDULES JSON
+        // SCHEDULES JSON — preserve existing calId/calLink when rescheduling
         const schedules = parseSchedules(row ? cellValue(row, C.SCHEDULES) : '');
-        const entry = { id: entryId, type: 'visit', at: fmt, parent: parentStr, calId: '' };
+        const entry = { id: entryId, type: 'visit', at: fmt, parent: parentStr, calId: preservedCalId, calLink: preservedCalLink };
         const updated = scheduleId
           ? schedules.map(s => s.id === entryId ? entry : s)
           : [...schedules, entry];
+        savedSchedules = updated;
         await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token);
         dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: JSON.stringify(updated) }));
       } catch (err) {
@@ -246,10 +260,34 @@ export default function ScheduleModal() {
     close();
     setSaving(false);
 
-    // Show WA share modal after scheduling
-    const tutorName  = row ? cellValue(row, C.NAME)  : '';
-    const tutorPhone = row ? cellValue(row, C.PHONE) : '';
-    const tutorEmail = row ? cellValue(row, C.EMAIL) : '';
+    // Background calendar update — full flow: update event + persist new calLink
+    if (!DEV_MODE && preservedCalId && tutorEmail) {
+      const studentName = parent?.studentName || '';
+      const desc = [
+        `KidsBuddy Visit — ${tutorName}`,
+        parent?.name               ? `Parent: ${parent.name}`               : '',
+        studentName                ? `Student: ${studentName}`              : '',
+        (parent?.address  || '').trim() ? `Address: ${parent.address.trim()}`  : '',
+        (parent?.mapsLink || '').trim() ? `Maps: ${parent.mapsLink.trim()}`    : '',
+      ].filter(Boolean).join('\n');
+
+      const calBody = buildCalendarBody(tutorName, tutorEmail, fmt, desc, `KidsBuddy Invitation: Tutor visit with ${studentName}`);
+      const { conferenceData: _omit, ...visitBody } = calBody;
+
+      updateCalendarEvent(preservedCalId, visitBody, token).then(res => {
+        const newCalLink = res?.htmlLink || preservedCalLink;
+        const base = savedSchedules || [];
+        const updatedWithLink = base.map(s =>
+          s.id === entryId ? { ...s, calId: preservedCalId, calLink: newCalLink } : s
+        );
+        const updatedStr = JSON.stringify(updatedWithLink);
+        dispatch(updateRowInPlace({ sheetRow, colIdx: C.SCHEDULES, value: updatedStr }));
+        updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, updatedStr, token).catch(() => {});
+      }).catch(err => {
+        dispatch(showToast({ message: 'Calendar update failed: ' + err.message, type: 'error' }));
+      });
+    }
+
     dispatch(openWAShareModal({
       type: 'visit',
       tutorName, tutorPhone, dateStr: fmt,
@@ -261,6 +299,7 @@ export default function ScheduleModal() {
       scheduleId: entryId,
       tutorEmail,
       sheetRow,
+      existingCalId: preservedCalId || (scheduleId ? 'reschedule' : ''),
     }));
   };
 

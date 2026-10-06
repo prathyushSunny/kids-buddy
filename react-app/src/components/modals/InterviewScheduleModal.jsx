@@ -18,7 +18,7 @@ function DrumCol({ items, defaultIndex, onChange }) {
   useEffect(() => {
     if (!ref.current) return;
     ref.current.scrollTop = (defaultIndex + 1) * ITEM_H;
-  }, []);
+  }, [defaultIndex]);
   const handleScroll = useCallback(() => {
     if (!ref.current) return;
     const idx = Math.max(0, Math.min(Math.round(ref.current.scrollTop / ITEM_H) - 1, items.length - 1));

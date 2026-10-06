@@ -329,16 +329,13 @@ export default function ParentCard({ row: initialRow, cfg, expandedUid, onExpand
           </div>
 
           <div className="card-section">
-            <div className="card-section-header">
-              <span className="cs-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                {USER_SVG} Contact
-              </span>
-            </div>
             <div className="card-section-body">
               <div className="contact-phone-row">
                 <span className="phone-num">{phone}</span>
                 {contactIcons}
               </div>
+            </div>
+            <div className="card-section-header">
               <button
                 className={`pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}`}
                 onClick={handleContactedToggle}

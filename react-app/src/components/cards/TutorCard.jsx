@@ -12,7 +12,7 @@ import {
   openWAShareModal, openContactFollowUpModal,
   openCalPromptModal, openPostRejectionModal,
 } from '../../features/ui/uiSlice';
-import { updateRowInPlace, removeRow, incrementTabCount } from '../../features/tutors/tutorsSlice';
+import { updateRowInPlace, removeRow, incrementTabCount, moveRowStatus } from '../../features/tutors/tutorsSlice';
 import { loadParents } from '../../features/parents/parentsSlice';
 
 // ── SVGs (matching vanilla) ───────────────────────────────────────────────────
@@ -366,6 +366,28 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
     if (!DEV_MODE) {
       updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.SCHEDULES + 1, JSON.stringify(updated), token).catch(() => {});
     }
+
+    if (status === 'cleared') {
+      const isVisit = entry.type === 'visit';
+      const targetStatus = isVisit ? 'Onboarded' : 'In-Loop';
+      const label = isVisit ? `Move ${name} to Onboarded?` : `Move ${name} to In-Loop?`;
+      setConfirmCallback(async () => {
+        if (!DEV_MODE) {
+          dispatch(showLoader());
+          try {
+            await updateCell(SHEETS.TUTORS_APPLIED, sheetRow, C.STATUS + 1, targetStatus, token);
+          } catch (err) {
+            dispatch(hideLoader());
+            dispatch(showToast({ message: 'Failed: ' + err.message, type: 'error' }));
+            return;
+          }
+          dispatch(hideLoader());
+        }
+        dispatch(moveRowStatus({ sheetRow, newStatus: targetStatus }));
+        dispatch(showToast(`${name} moved to ${targetStatus}`));
+      });
+      dispatch(openConfirmModal({ message: label }));
+    }
   };
 
   const toggleParentExpand = (e, entryId) => {
@@ -447,12 +469,12 @@ function ScheduleSection({ row, sheetRow, onUpdate }) {
                         {GCAL_SVG} Join Meet
                       </a>
                     )}
-                    <button className="btn-iv-action btn-iv-wa" onClick={e => openShareWA(e, entry)}>{WA_SVG} Share</button>
                     {!isInterview && (
                       entry.calId
-                        ? <span className="iv-cal-blocked">{GCAL_SVG} In Calendar</span>
+                        ? <a className="btn-iv-action" href={entry.calLink || `https://calendar.google.com/calendar/r`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>{GCAL_SVG} View Event</a>
                         : <button className="btn-iv-action" onClick={e => openBlockCal(e, entry)}>{GCAL_SVG} Block Calendar</button>
                     )}
+                    <button className="btn-iv-action btn-iv-wa" onClick={e => openShareWA(e, entry)}>{WA_SVG} Share</button>
                   </div>
                 )}
               </div>
@@ -789,16 +811,13 @@ export default function TutorCard({ row: initialRow, cfg, expandedUid, onExpand,
 
           {/* Contact section */}
           <div className="card-section">
-            <div className="card-section-header">
-              <span className="cs-label" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                {USER_SVG} Contact
-              </span>
-            </div>
             <div className="card-section-body">
               <div className="contact-phone-row">
                 <span className="phone-num">{phone}</span>
                 {contactIcons}
               </div>
+            </div>
+            <div className="card-section-header">
               <button
                 className={`pill-toggle ${contacted === 'Yes' ? 'yes' : 'no'}`}
                 onClick={handleContactedToggle}
