@@ -9,6 +9,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;700&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/png" href="assets/app-icon.png" />
+  <link rel="apple-touch-icon" href="assets/app-icon.png" />
+  <link rel="canonical" href="https://kidsbuddy.online/" />
+
+  <!-- SEO: robots, author, theme -->
+  <meta name="robots" content="index, follow" />
+  <meta name="author" content="KiDS Buddy Home Tuitions" />
+  <meta name="theme-color" content="#2563EB" />
+
+  <!-- Local SEO: geo tags for Hyderabad -->
+  <meta name="geo.region" content="IN-TG" />
+  <meta name="geo.placename" content="Hyderabad, Telangana, India" />
+  <meta name="geo.position" content="17.3850;78.4867" />
+  <meta name="ICBM" content="17.3850, 78.4867" />
 
   <!-- Open Graph / WhatsApp / Social preview -->
   <meta property="og:type"        content="website" />
@@ -28,6 +41,81 @@
   <meta name="twitter:image"       content="https://kidsbuddy.online/assets/images/hero_tutor_child_home.png" />
 
   <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- Structured Data: LocalBusiness + EducationalOrganization -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["LocalBusiness", "EducationalOrganization"],
+    "name": "KiDS Buddy Home Tuitions",
+    "alternateName": "KiDS Buddy",
+    "description": "Personalised home tuitions for kids aged 3–18 in Hyderabad and Bengaluru. All subjects, all boards — CBSE, ICSE, State, IB, IGCSE. Free demo available.",
+    "url": "https://kidsbuddy.online/",
+    "logo": "https://kidsbuddy.online/assets/app-icon.png",
+    "image": "https://kidsbuddy.online/assets/images/hero_tutor_child_home.png",
+    "telephone": "+916305458084",
+    "priceRange": "₹₹",
+    "currenciesAccepted": "INR",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Hyderabad",
+      "addressRegion": "Telangana",
+      "addressCountry": "IN"
+    },
+    "areaServed": [
+      { "@type": "City", "name": "Hyderabad" },
+      { "@type": "City", "name": "Bengaluru" }
+    ],
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+916305458084",
+      "contactType": "customer service",
+      "availableLanguage": ["English", "Hindi", "Telugu"]
+    },
+    "hasOfferCatalog": {
+      "@type": "OfferCatalog",
+      "name": "Home Tuition Services",
+      "itemListElement": [
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Academic Home Tuition",
+            "description": "Home tuition for Grades 1–12 and above. All boards: CBSE, ICSE, State, IB, IGCSE, PYP. Competitive exam prep: JEE, NEET, NTSE, Olympiads."
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Early Learning Programs",
+            "description": "Kindergarten play-way, Abacus, Rubik's Cube, foundational financial literacy for young children."
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Enrichment and Creative Skills",
+            "description": "Vocals, Dance, Music, Drawing, Painting, Handwriting, Spoken English, Hindi, Telugu, Communication Skills, MS Office, Mehendi Art."
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Therapeutic Support",
+            "description": "Speech Therapy, Occupational Therapy, and Behavioural Therapy at home."
+          }
+        }
+      ]
+    },
+    "sameAs": [
+      "https://wa.me/916305458084",
+      "https://forms.gle/T92s8aD3oTgoPM9bA"
+    ]
+  }
+  </script>
 </head>
 <body>
 
@@ -114,14 +202,14 @@
         <div class="hero-image">
           <img src="assets/images/hero_tutor_child_home.png"
                alt="A KiDS Buddy tutor teaching a child at home in Hyderabad"
-               width="560" height="480" loading="eager" />
+               width="560" height="480" loading="eager" fetchpriority="high" />
         </div>
       </div>
     </section>
 
 
     <!-- ── SERVICES ────────────────────────────────────────────────────────── -->
-    <div id="services">
+    <div id="services" role="region" aria-label="Our services">
 
       <!-- Academic Home Tuition -->
       <section class="section-split" aria-labelledby="academic-heading">
