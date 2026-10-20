@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { getUserInfo } from '../../services/sheetsApi';
-import { ALLOWED_EMAILS, DEV_MODE } from '../../constants';
+import { DEV_MODE } from '../../constants';
 
 const SK = { token: 'kb_token', expiry: 'kb_expiry', email: 'kb_email', name: 'kb_name' };
 
@@ -31,9 +31,6 @@ export const verifyAndLogin = createAsyncThunk(
     try {
       const info  = await getUserInfo(token);
       const email = (info.email || '').toLowerCase();
-      if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
-        return rejectWithValue('Access denied — this dashboard is for authorized team members only.');
-      }
       const name = info.name || info.given_name || '';
       saveSession(token, expiresIn || 3600, email, name);
       return { token, email, name };
