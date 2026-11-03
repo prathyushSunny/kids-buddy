@@ -17,7 +17,13 @@ export default function ContactFollowUpModal() {
   const parentRows  = useSelector(s => s.parents.allRows);
   const [step, setStep] = useState(1);
 
-  useEffect(() => { if (open) setStep(1); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setStep(1);
+    // iOS Safari scroll-jump fix: fixed overlays shift scroll position on mobile
+    const savedY = window.scrollY;
+    return () => { window.scrollTo(0, savedY); };
+  }, [open]);
 
   if (!open) return null;
 

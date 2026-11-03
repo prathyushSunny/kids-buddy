@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeConfirmModal } from '../../features/ui/uiSlice';
 import { fireConfirmCallback } from '../../utils/confirmService';
@@ -6,6 +6,13 @@ import { fireConfirmCallback } from '../../utils/confirmService';
 export default function ConfirmModal() {
   const dispatch = useDispatch();
   const { open, message } = useSelector(s => s.ui.modals.confirm);
+
+  // iOS Safari scroll-jump fix: fixed overlays shift scroll position on mobile
+  useEffect(() => {
+    if (!open) return;
+    const savedY = window.scrollY;
+    return () => { window.scrollTo(0, savedY); };
+  }, [open]);
 
   if (!open) return null;
 
