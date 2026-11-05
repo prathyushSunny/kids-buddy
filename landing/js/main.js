@@ -1,4 +1,4 @@
-const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1555335398174232647/VV3wuAeA0-1X-umA9dbsid7SerMalmxImUfZZ5D9tHYQHVwbxc9tB1RNvkIhc9utdVhu';
+const DISCORD_WEBHOOK_URL = ''; // removed — do NOT hardcode here, use a backend proxy
 
 /* ── NAVBAR: scroll class ─────────────────────────────────────────────────── */
 const navbar = document.getElementById('navbar');
