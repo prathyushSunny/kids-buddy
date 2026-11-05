@@ -1,4 +1,4 @@
-const DISCORD_WEBHOOK_URL = ''; // removed — do NOT hardcode here, use a backend proxy
+const KB_WA_NUMBER = '916305458084';
 
 /* ── NAVBAR: scroll class ─────────────────────────────────────────────────── */
 const navbar = document.getElementById('navbar');
@@ -37,8 +37,6 @@ const openBtn       = document.getElementById('callbackBtn');
 const closeBtn      = document.getElementById('modalCloseBtn');
 const form          = document.getElementById('callbackForm');
 const submitBtn     = document.getElementById('cbSubmitBtn');
-const btnText       = document.getElementById('cbBtnText');
-const spinner       = document.getElementById('cbSpinner');
 const nameInput     = document.getElementById('cb-name');
 const phoneInput    = document.getElementById('cb-phone');
 const nameError     = document.getElementById('name-error');
@@ -103,26 +101,12 @@ function validate() {
   return ok;
 }
 
-async function sendToDiscord(name, phone, role) {
-  const roleEmoji = { Parent: '👨‍👩‍👧', Student: '🎒', Teacher: '📚' }[role] || '❓';
-  const payload = {
-    embeds: [{
-      title: '📞 New Callback Request — KiDS Buddy',
-      color: 0x2563EB,
-      description: `${roleEmoji} **${role}** · ${name}\n📱 \`${phone}\``,
-      footer: { text: 'KiDS Buddy Landing · kidsbuddy.online' },
-      timestamp: new Date().toISOString(),
-    }],
-  };
-  const res = await fetch(DISCORD_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Webhook error ${res.status}`);
+function openWhatsApp(name, phone, role) {
+  const msg = `Hi KiDS Buddy! I'd like to request a callback.\n\nName: ${name}\nPhone: ${phone}\nI am a: ${role}`;
+  window.open(`https://wa.me/${KB_WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
 }
 
-form.addEventListener('submit', async e => {
+form.addEventListener('submit', e => {
   e.preventDefault();
   if (!validate()) return;
 
@@ -130,23 +114,9 @@ form.addEventListener('submit', async e => {
   const phone = normalizePhone(phoneInput.value);
   const role  = form.querySelector('input[name="role"]:checked')?.value || '';
 
-  // Loading state
-  submitBtn.disabled = true;
-  btnText.hidden     = true;
-  spinner.hidden     = false;
-
-  try {
-    await sendToDiscord(name, phone, role);
-    defaultView.hidden = true;
-    successView.hidden = false;
-  } catch {
-    defaultView.hidden = true;
-    errorView.hidden   = false;
-  } finally {
-    submitBtn.disabled = false;
-    btnText.hidden     = false;
-    spinner.hidden     = true;
-  }
+  defaultView.hidden = true;
+  successView.hidden = false;
+  openWhatsApp(name, phone, role);
 });
 
 openBtn.addEventListener('click', openModal);
